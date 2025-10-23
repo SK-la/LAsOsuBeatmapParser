@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>10.0</LangVersion>
+    <Nullable>enable</Nullable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <PackageId>LAsOsuBeatmapParser</PackageId>
+    <Version>1.0.0</Version>
+    <Authors>Your Name</Authors>
+    <Description>A lightweight, high-performance C# library for parsing osu! .osu files.</Description>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/yourusername/LAsOsuBeatmapParser</RepositoryUrl>
+    <!-- 禁用库项目中常见的未使用警告 -->
+    <NoWarn>$(NoWarn);CS0219;CS0169;CS0414;CS0649;CS0659;CS0660;CS0661</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Remove="Analysis\SRCalculator.cs" />
+    <Folder Include="Extensions\" />
+    <Folder Include="Parsers\" />
+  </ItemGroup>
+
+</Project>

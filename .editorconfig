@@ -1,0 +1,34 @@
+# EditorConfig is awesome: https://EditorConfig.org
+
+# top-most EditorConfig file
+root = true
+
+# All files
+[*]
+charset = utf-8
+end_of_line = crlf
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+# C# files
+[*.cs]
+indent_style = space
+indent_size = 4
+
+# XML project files
+[*.{csproj,xml}]
+indent_style = space
+indent_size = 2
+
+# Markdown files
+[*.md]
+trim_trailing_whitespace = false
+
+# Suppress common warnings for library projects
+dotnet_diagnostic.CS0219.severity = none  # Variable is assigned but its value is never used
+dotnet_diagnostic.CS0169.severity = none  # Field is never used
+dotnet_diagnostic.CS0414.severity = none  # Field is assigned but its value is never used
+dotnet_diagnostic.CS0649.severity = none  # Field is never assigned to, and will always have its default value
+dotnet_diagnostic.CS0659.severity = none  # Overrides Object.Equals but not Object.GetHashCode
+dotnet_diagnostic.CS0660.severity = none  # Type defines operator == or operator != but does not override Object.Equals
+dotnet_diagnostic.CS0661.severity = none  # Type defines operator == or operator != but does not override Object.GetHashCode
