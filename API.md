@@ -162,6 +162,23 @@ double sr = calculator.CalculateSR(maniaBeatmap);
 
 ## 序列化和反序列化 / Serialization and Deserialization
 
+### .osu 文件编码 / .osu File Encoding
+
+```csharp
+// 创建编码器 / Create encoder
+var encoder = new LegacyBeatmapEncoder();
+
+// 编码为字符串 / Encode to string
+string osuContent = encoder.EncodeToString(beatmap);
+
+// 编码到文件 / Encode to file
+encoder.EncodeToFile(beatmap, "output.osu");
+
+// 使用 lazer 版本格式 (v128) / Use lazer version format
+var lazerEncoder = new LegacyBeatmapEncoder(useLazerVersion: true);
+string lazerContent = lazerEncoder.EncodeToString(beatmap);
+```
+
 ### JSON 序列化 / JSON Serialization
 
 ```csharp

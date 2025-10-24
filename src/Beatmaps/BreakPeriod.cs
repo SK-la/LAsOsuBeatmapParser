@@ -10,12 +10,12 @@ public class BreakPeriod : IComparable<BreakPeriod>, IEquatable<BreakPeriod>
     /// <summary>
     /// The start time of the break.
     /// </summary>
-    public double StartTime { get; set; }
+    public double StartTime { get; init; }
 
     /// <summary>
     /// The end time of the break.
     /// </summary>
-    public double EndTime { get; set; }
+    public double EndTime { get; init; }
 
     /// <summary>
     /// The duration of the break.
@@ -50,14 +50,27 @@ public class BreakPeriod : IComparable<BreakPeriod>, IEquatable<BreakPeriod>
     /// </summary>
     /// <param name="other">The other break period.</param>
     /// <returns>True if equal, false otherwise.</returns>
-    public bool Equals(BreakPeriod? other) =>
-        other != null && StartTime == other.StartTime && EndTime == other.EndTime;
+    public bool Equals(BreakPeriod? other)
+    {
+        if (other is null) return false;
+
+        const double epsilon = 1e-7; // Small tolerance for floating point comparison
+        return Math.Abs(StartTime - other.StartTime) < epsilon &&
+               Math.Abs(EndTime - other.EndTime) < epsilon;
+    }
 
     /// <summary>
     /// Returns the hash code for this break period.
     /// </summary>
     /// <returns>The hash code.</returns>
-    public override int GetHashCode() => HashCode.Combine(StartTime, EndTime);
+    public override int GetHashCode()
+    {
+        const double epsilon = 1e-7;
+        // Round to the nearest multiple of epsilon to ensure equal objects have equal hash codes
+        long startRounded = (long)Math.Round(StartTime / epsilon);
+        long endRounded = (long)Math.Round(EndTime / epsilon);
+        return HashCode.Combine(startRounded, endRounded);
+    }
 
     /// <summary>
     /// Returns a string representation of this break period.

@@ -35,6 +35,7 @@ public class ManiaHoldNote : HitObject
     /// Hold的结束时间。
     /// </summary>
     public override double EndTime { get; set; }
+
     /// <summary>
     /// 所在列（键）。
     /// </summary>
@@ -44,6 +45,21 @@ public class ManiaHoldNote : HitObject
     /// 总键数。
     /// </summary>
     public int KeyCount { get; set; }
+
+    /// <summary>
+    /// For Mania, Position.X represents the calculated X coordinate from column.
+    /// Position.Y is always 192 (center of playfield).
+    /// </summary>
+    public new (float X, float Y) Position
+    {
+        get => (Column * (512f / KeyCount), 192f);
+        set
+        {
+            // When setting position, convert back to column
+            if (KeyCount > 0)
+                Column = (int)Math.Round(value.X / (512f / KeyCount));
+        }
+    }
 
     /// <summary>
     /// Returns a string representation of this hold note.
@@ -59,9 +75,7 @@ public class ManiaHoldNote : HitObject
         int x = (int)Math.Ceiling(Column * ratio);
         int y = 192; // Standard y position
         int type = 128; // Hold note type
-        int hitSound = 0;
-        string hitSample = $"{(int)EndTime}:0:0:0:";
 
-        return $"{x},{y},{(int)StartTime},{type},{hitSound},{hitSample}";
+        return $"{x},{y},{(int)StartTime},{type},{Hitsound},{(int)EndTime}:{HitSamples}";
     }
 }

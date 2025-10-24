@@ -146,20 +146,61 @@ public class GameMode : IGameMode, IEquatable<GameMode>
 
 /// <summary>
 /// 自定义游戏模式实现，用于处理未知的游戏模式ID。
+/// Custom game mode implementation for handling unknown game mode IDs.
 /// </summary>
 public class CustomGameMode : IGameMode, IEquatable<CustomGameMode>
 {
+    /// <summary>
+    /// 创建自定义游戏模式实例。
+    /// Creates a custom game mode instance.
+    /// </summary>
+    /// <param name="id">游戏模式ID / Game mode ID</param>
+    /// <param name="name">游戏模式名称 / Game mode name</param>
     public CustomGameMode(int id, string name)
     {
         Id = id;
         Name = name;
     }
 
+    /// <summary>
+    /// 获取游戏模式的唯一标识符。
+    /// Gets the unique identifier of the game mode.
+    /// </summary>
     public int Id { get; }
+
+    /// <summary>
+    /// 获取游戏模式的显示名称。
+    /// Gets the display name of the game mode.
+    /// </summary>
     public string Name { get; }
 
+    /// <summary>
+    /// 返回游戏模式的字符串表示。
+    /// Returns the string representation of the game mode.
+    /// </summary>
+    /// <returns>游戏模式名称 / Game mode name</returns>
     public override string ToString() => Name;
+
+    /// <summary>
+    /// 确定指定的对象是否等于当前对象。
+    /// Determines whether the specified object is equal to the current object.
+    /// </summary>
+    /// <param name="obj">要比较的对象 / The object to compare</param>
+    /// <returns>如果对象相等则返回 true，否则返回 false / true if the objects are equal, otherwise false</returns>
     public override bool Equals(object? obj) => Equals(obj as CustomGameMode);
+
+    /// <summary>
+    /// 确定指定的 CustomGameMode 是否等于当前 CustomGameMode。
+    /// Determines whether the specified CustomGameMode is equal to the current CustomGameMode.
+    /// </summary>
+    /// <param name="other">要比较的 CustomGameMode / The CustomGameMode to compare</param>
+    /// <returns>如果对象相等则返回 true，否则返回 false / true if the objects are equal, otherwise false</returns>
     public bool Equals(CustomGameMode? other) => other is not null && Id == other.Id;
+
+    /// <summary>
+    /// 返回当前对象的哈希码。
+    /// Returns the hash code for the current object.
+    /// </summary>
+    /// <returns>哈希码 / Hash code</returns>
     public override int GetHashCode() => Id.GetHashCode();
 }

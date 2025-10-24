@@ -94,6 +94,50 @@ string json = JsonSerializer.Serialize(beatmap);
 
 // 从JSON转换 / From JSON
 Beatmap beatmap = JsonSerializer.Deserialize<Beatmap>(json);
+
+// 编码为.osu文件 / Encode to .osu file
+var encoder = new LegacyBeatmapEncoder();
+string osuContent = encoder.EncodeToString(beatmap);
+```
+
+### 预计算分析数据 / Precomputed Analysis Data
+
+为了提高性能，解析器可以在解析时预计算谱面分析数据，避免后续重复计算：
+
+```csharp
+using LAsOsuBeatmapParser.Beatmaps.Formats;
+
+// 启用预计算（默认）/ Enable precomputation (default)
+var decoder = new LegacyBeatmapDecoder(true);
+Beatmap beatmap = decoder.Decode("path/to/beatmap.osu");
+
+// 禁用预计算 / Disable precomputation
+var decoder = new LegacyBeatmapDecoder(false);
+Beatmap beatmap = decoder.Decode("path/to/beatmap.osu");
+
+// 方法级别的开关 / Method-level override
+var decoder = new LegacyBeatmapDecoder(); // 默认启用
+Beatmap beatmap = decoder.Decode("path/to/beatmap.osu", precomputeAnalysisData: false);
+```
+
+预计算数据包括：
+- 总note数量、长按note数量
+- 谱面时长、平均KPS、最大KPS
+- 键位分布统计
+- SR计算优化数据
+
+```csharp
+// 访问预计算数据 / Access precomputed data
+var analysisData = beatmap.AnalysisData;
+Console.WriteLine($"Total Notes: {analysisData.TotalNotes}");
+Console.WriteLine($"Average KPS: {analysisData.AverageKPS:F2}");
+Console.WriteLine($"Max KPS: {analysisData.MaxKPS:F2}");
+```
+encoder.EncodeToFile(beatmap, "output.osu");
+
+// 使用lazer版本格式 / Use lazer version format
+var lazerEncoder = new LegacyBeatmapEncoder(useLazerVersion: true);
+string lazerContent = lazerEncoder.EncodeToString(beatmap);
 ```
 
 ### 验证 / Validation

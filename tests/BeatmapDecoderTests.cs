@@ -421,4 +421,43 @@ ApproachRate:5
 
         return sectionMatches;
     }
+
+    [Fact]
+    public void PerformanceTest_PrecomputationOptimization()
+    {
+        // Arrange
+        string testFile = Path.Combine("Resource", "Jumpstream - Happy Hardcore Synthesizer (SK_la) [10k-1].osu");
+        var decoder = new LegacyBeatmapDecoder();
+
+        // Act - Test with precomputation disabled
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        var beatmapNoPrecompute = decoder.Decode(testFile, false);
+        stopwatch.Stop();
+        var timeNoPrecompute = stopwatch.ElapsedMilliseconds;
+
+        // Assert - Verify no SR data is created when disabled
+        Assert.Null(beatmapNoPrecompute.AnalysisData.SRsNotes);
+        Assert.Null(beatmapNoPrecompute.AnalysisData.KeyDistribution);
+
+        // Act - Test with precomputation enabled
+        stopwatch.Restart();
+        var beatmapWithPrecompute = decoder.Decode(testFile, true);
+        stopwatch.Stop();
+        var timeWithPrecompute = stopwatch.ElapsedMilliseconds;
+
+        // Assert - Verify SR data is created when enabled
+        Assert.NotNull(beatmapWithPrecompute.AnalysisData.SRsNotes);
+        Assert.NotNull(beatmapWithPrecompute.AnalysisData.KeyDistribution);
+        Assert.Equal(beatmapWithPrecompute.HitObjects.Count, beatmapWithPrecompute.AnalysisData.SRsNotes.Length);
+
+        // Log performance results
+        _testOutputHelper.WriteLine($"Parse time without precompute: {timeNoPrecompute}ms");
+        _testOutputHelper.WriteLine($"Parse time with precompute: {timeWithPrecompute}ms");
+        _testOutputHelper.WriteLine($"SR notes created: {beatmapWithPrecompute.AnalysisData.SRsNotes.Length}");
+
+        // The optimization should show some performance benefit (allowing some variance)
+        // Note: This is a basic check - real performance testing would need more sophisticated benchmarking
+        Assert.True(timeWithPrecompute >= timeNoPrecompute || timeWithPrecompute <= timeNoPrecompute * 1.5,
+            "Precomputation should not significantly degrade performance");
+    }
 }

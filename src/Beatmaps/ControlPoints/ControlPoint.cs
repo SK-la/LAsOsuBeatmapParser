@@ -3,7 +3,7 @@ namespace LAsOsuBeatmapParser.Beatmaps.ControlPoints;
 /// <summary>
 /// A control point.
 /// </summary>
-public abstract class ControlPoint
+public abstract partial class ControlPoint
 {
     /// <summary>
     /// The time at which this control point takes effect.

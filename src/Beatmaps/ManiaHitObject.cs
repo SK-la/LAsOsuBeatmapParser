@@ -1,11 +1,12 @@
 using System;
+using LAsOsuBeatmapParser.Objects.Types;
 
 namespace LAsOsuBeatmapParser.Beatmaps;
 
 /// <summary>
 /// Represents a hit object in Mania.
 /// </summary>
-public class ManiaHitObject : HitObject
+public class ManiaHitObject : HitObject, IHasXPosition
 {
     /// <summary>
     /// The column this hit object is in (0-based).
@@ -16,6 +17,30 @@ public class ManiaHitObject : HitObject
     /// The total number of columns (key count) for this beatmap.
     /// </summary>
     public int KeyCount { get; set; }
+
+    /// <summary>
+    /// For Mania, Position.X represents the calculated X coordinate from column.
+    /// Position.Y is always 192 (center of playfield).
+    /// </summary>
+    public new (float X, float Y) Position
+    {
+        get => (Column * (512f / KeyCount), 192f);
+        set
+        {
+            // When setting position, convert back to column
+            if (KeyCount > 0)
+                Column = (int)Math.Round(value.X / (512f / KeyCount));
+        }
+    }
+
+    /// <summary>
+    /// Implements IHasXPosition.X - returns the column as X position.
+    /// </summary>
+    public float X
+    {
+        get => Column;
+        set => Column = (int)value;
+    }
 
     /// <summary>
     /// Creates a new ManiaHitObject.
@@ -54,7 +79,7 @@ public class ManiaHitObject : HitObject
     /// <returns>The string representation.</returns>
     public override string ToString()
     {
-        // Mania hit objects: x,y,time,type,hitSound,endTime:hitSample
+        // Mania hit objects: x,y,time,type,hitSound,hitSample
         // x is position, y is 192 for standard position
         // Use official osu formula: x = ceil(column * (512 / keyCount))
         const int totalWidth = 512;
@@ -63,9 +88,10 @@ public class ManiaHitObject : HitObject
         int x = (int)Math.Ceiling(Column * ratio);
         int y = 192; // Standard y position for mania
         int type = 1; // Normal hit
-        int hitSound = 0;
-        string hitSample = "0:0:0:0:";
 
-        return $"{x},{y},{(int)StartTime},{type},{hitSound},{hitSample}";
+        // Ensure hit samples has a default value for mania
+        string hitSamples = string.IsNullOrEmpty(HitSamples) ? "0:0:0:0:" : HitSamples;
+
+        return $"{x},{y},{(int)StartTime},{type},{Hitsound},{hitSamples}";
     }
 }

@@ -12,7 +12,7 @@ namespace LAsOsuBeatmapParser.Converters;
 public class HitObjectListConverter : JsonConverter<List<HitObject>>
 {
     /// <summary>
-    /// 
+    ///
     /// </summary>
     /// <param name="reader"></param>
     /// <param name="typeToConvert"></param>
@@ -42,7 +42,7 @@ public class HitObjectListConverter : JsonConverter<List<HitObject>>
                     var typeInt = typeProp.GetInt32();
                     var type = (HitObjectType)typeInt;
 
-                    HitObject? hitObject = null;
+                    HitObject? hitObject;
 
                     if (type.HasFlag(HitObjectType.ManiaHold))
                     {
@@ -71,7 +71,7 @@ public class HitObjectListConverter : JsonConverter<List<HitObject>>
     }
 
     /// <summary>
-    /// 
+    ///
     /// </summary>
     /// <param name="writer"></param>
     /// <param name="value"></param>

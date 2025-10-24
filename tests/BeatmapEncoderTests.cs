@@ -80,7 +80,7 @@ public class BeatmapEncoderTests
         Assert.Contains("[TimingPoints]", result);
         Assert.Contains("0,500,4,1,1,100,1,0", result);
         Assert.Contains("[HitObjects]", result);
-        Assert.Contains("1000,1,0,0:0:0:0:", result); // Mania hit object format
+        Assert.Contains("0,192,1000,1,0,0:0:0:0:", result); // Mania hit object format
     }
 
     [Fact]
@@ -193,6 +193,7 @@ public class BeatmapEncoderTests
             Assert.NotNull(maniaHit);
             Assert.Equal(column, maniaHit.Column);
             Assert.Equal(keyCount, maniaHit.KeyCount);
+            Assert.Equal(192f, maniaHit.Position.Y); // Y should always be 192 for mania
         }
     }
 
@@ -310,5 +311,58 @@ public class BeatmapEncoderTests
         _output.WriteLine("=== ENCODED CONTENT START ===");
         _output.WriteLine(encodedContent);
         _output.WriteLine("=== ENCODED CONTENT END ===");
+    }
+
+    [Fact]
+    public void EncodeToString_UseLazerVersion_OutputsVersion128()
+    {
+        // Arrange
+        var beatmap = new Beatmap
+        {
+            Mode = GameMode.Mania,
+            Version = 14,
+            BeatmapInfo = new BeatmapInfo
+            {
+                Metadata = new BeatmapMetadata
+                {
+                    Title = "Test Song",
+                    Artist = "Test Artist",
+                    Author = new BeatmapAuthor { Username = "Test Creator" },
+                    Version = "Easy"
+                },
+                DifficultyName = "Easy",
+                Difficulty = new BeatmapDifficulty
+                {
+                    HPDrainRate = 5,
+                    CircleSize = 4,
+                    OverallDifficulty = 5,
+                    ApproachRate = 5
+                }
+            },
+            DifficultyLegacy = new BeatmapDifficulty
+            {
+                HPDrainRate = 5,
+                CircleSize = 4,
+                OverallDifficulty = 5,
+                ApproachRate = 5
+            },
+            HitObjects = new List<HitObject>
+            {
+                new ManiaHitObject(1000, 0, 4),
+                new ManiaHitObject(2000, 1, 4)
+            }
+        };
+
+        // Act - Default version
+        var defaultEncoder = new LegacyBeatmapEncoder();
+        string defaultContent = defaultEncoder.EncodeToString(beatmap);
+
+        // Act - Lazer version
+        var lazerEncoder = new LegacyBeatmapEncoder(useLazerVersion: true);
+        string lazerContent = lazerEncoder.EncodeToString(beatmap);
+
+        // Assert
+        Assert.Contains("osu file format v14", defaultContent);
+        Assert.Contains("osu file format v128", lazerContent);
     }
 }

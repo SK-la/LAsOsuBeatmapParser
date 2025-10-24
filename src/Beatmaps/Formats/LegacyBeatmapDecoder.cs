@@ -3,8 +3,10 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using LAsOsuBeatmapParser.Analysis;
 using LAsOsuBeatmapParser.Beatmaps;
 using LAsOsuBeatmapParser.Exceptions;
+using LAsOsuBeatmapParser.Extensions;
 
 namespace LAsOsuBeatmapParser.Beatmaps.Formats
 {
@@ -14,6 +16,11 @@ namespace LAsOsuBeatmapParser.Beatmaps.Formats
     public class LegacyBeatmapDecoder
     {
         /// <summary>
+        /// 是否在解析时预计算分析数据。默认为 true。
+        /// </summary>
+        public bool EnableAnalysisDataPrecomputation { get; set; } = true;
+
+        /// <summary>
         /// 创建 LegacyBeatmapDecoder。
         /// </summary>
         public LegacyBeatmapDecoder()
@@ -21,17 +28,27 @@ namespace LAsOsuBeatmapParser.Beatmaps.Formats
         }
 
         /// <summary>
+        /// 创建 LegacyBeatmapDecoder，并指定是否预计算分析数据。
+        /// </summary>
+        /// <param name="enableAnalysisDataPrecomputation">是否预计算分析数据。</param>
+        public LegacyBeatmapDecoder(bool enableAnalysisDataPrecomputation)
+        {
+            EnableAnalysisDataPrecomputation = enableAnalysisDataPrecomputation;
+        }
+
+        /// <summary>
         /// 同步从文件路径解析谱面。
         /// </summary>
         /// <param name="filePath">.osu 文件路径。</param>
+        /// <param name="precomputeAnalysisData">是否预计算分析数据。默认为类的设置。</param>
         /// <returns>解析得到的谱面对象。</returns>
         /// <exception cref="BeatmapParseException">解析失败时抛出。</exception>
-        public Beatmap Decode(string filePath)
+        public Beatmap Decode(string filePath, bool? precomputeAnalysisData = null)
         {
             try
             {
                 using FileStream stream = File.OpenRead(filePath);
-                return Decode(stream);
+                return Decode(stream, precomputeAnalysisData);
             }
             catch (Exception ex)
             {
@@ -43,14 +60,15 @@ namespace LAsOsuBeatmapParser.Beatmaps.Formats
         /// 异步从文件路径解析谱面。
         /// </summary>
         /// <param name="filePath">.osu 文件路径。</param>
+        /// <param name="precomputeAnalysisData">是否预计算分析数据。默认为类的设置。</param>
         /// <returns>解析得到的谱面对象。</returns>
         /// <exception cref="BeatmapParseException">解析失败时抛出。</exception>
-        public async Task<Beatmap> DecodeAsync(string filePath)
+        public async Task<Beatmap> DecodeAsync(string filePath, bool? precomputeAnalysisData = null)
         {
             try
             {
                 await using FileStream stream = File.OpenRead(filePath);
-                return await DecodeAsync(stream);
+                return await DecodeAsync(stream, precomputeAnalysisData);
             }
             catch (Exception ex)
             {
@@ -62,30 +80,41 @@ namespace LAsOsuBeatmapParser.Beatmaps.Formats
         /// 从流中同步解析谱面。
         /// </summary>
         /// <param name="stream">包含 .osu 数据的流。</param>
+        /// <param name="precomputeAnalysisData">是否预计算分析数据。默认为类的设置。</param>
         /// <returns>解析得到的谱面对象。</returns>
         /// <exception cref="BeatmapParseException">解析失败时抛出。</exception>
-        public Beatmap Decode(Stream stream)
+        public Beatmap Decode(Stream stream, bool? precomputeAnalysisData = null)
         {
             using var reader = new StreamReader(stream);
-            return ParseBeatmap(reader);
+            return ParseBeatmap(reader, precomputeAnalysisData ?? EnableAnalysisDataPrecomputation);
         }
 
         /// <summary>
         /// 从流中异步解析谱面。
         /// </summary>
         /// <param name="stream">包含 .osu 数据的流。</param>
+        /// <param name="precomputeAnalysisData">是否预计算分析数据。默认为类的设置。</param>
         /// <returns>解析得到的谱面对象。</returns>
         /// <exception cref="BeatmapParseException">解析失败时抛出。</exception>
-        public async Task<Beatmap> DecodeAsync(Stream stream)
+        public async Task<Beatmap> DecodeAsync(Stream stream, bool? precomputeAnalysisData = null)
         {
             using var reader = new StreamReader(stream);
-            return await Task.Run(() => ParseBeatmap(reader));
+            return await Task.Run(() => ParseBeatmap(reader, precomputeAnalysisData ?? EnableAnalysisDataPrecomputation));
         }
 
-        private Beatmap ParseBeatmap(StreamReader reader)
+        private Beatmap ParseBeatmap(StreamReader reader, bool precomputeAnalysisData = true)
         {
             var beatmap = new Beatmap();
             string currentSection = "";
+
+            // 设置预计算标志（向后兼容，但现在不自动预计算）
+            beatmap.IsAnalysisDataPrecomputationEnabled = precomputeAnalysisData;
+
+            // 如果启用预计算，使用扩展方法计算分析数据
+            if (precomputeAnalysisData)
+            {
+                beatmap.CalculateAnalysisData(calculateSR: true);
+            }
 
             while (reader.ReadLine() is { } line)
             {
@@ -439,7 +468,10 @@ namespace LAsOsuBeatmapParser.Beatmaps.Formats
                 hitCircle.Hitsound = hitsound;
 
             if (parts.Length > 5)
-                hitCircle.ObjectParams = string.Join(",", parts[5..]);
+                hitCircle.HitSamples = parts[5];
+
+            if (parts.Length > 6)
+                hitCircle.ObjectParams = string.Join(",", parts[6..]);
 
             return hitCircle;
         }
@@ -456,20 +488,33 @@ namespace LAsOsuBeatmapParser.Beatmaps.Formats
 
             if (parts.Length > 5)
             {
+                // parts[5] is the curve string like "B|100:200|150:250"
                 string[] curveParts = parts[5].Split('|');
-
-                foreach (string curvePoint in curveParts.Skip(1)) // 跳过曲线类型
+                if (curveParts.Length > 0)
                 {
-                    string[] coords = curvePoint.Split(':');
-                    if (coords.Length == 2 &&
-                        float.TryParse(coords[0], out float cx) &&
-                        float.TryParse(coords[1], out float cy))
-                        slider.CurvePoints.Add((X: cx, Y: cy));
+                    // First part is curve type, skip it for curve points
+                    for (int i = 1; i < curveParts.Length; i++)
+                    {
+                        string[] coords = curveParts[i].Split(':');
+                        if (coords.Length == 2 &&
+                            float.TryParse(coords[0], out float cx) &&
+                            float.TryParse(coords[1], out float cy))
+                            slider.CurvePoints.Add((X: cx, Y: cy));
+                    }
                 }
             }
 
-            if (parts.Length > 7 && double.TryParse(parts[7], out double duration))
-                slider.Duration = duration;
+            if (parts.Length > 6 && int.TryParse(parts[6], out int slides))
+                slider.Slides = slides;
+
+            if (parts.Length > 7 && double.TryParse(parts[7], out double length))
+                slider.Length = length;
+
+            if (parts.Length > 4 && int.TryParse(parts[4], out int hitsound))
+                slider.Hitsound = hitsound;
+
+            if (parts.Length > 8)
+                slider.ObjectParams = string.Join(",", parts[8..]);
 
             return slider;
         }
@@ -481,8 +526,17 @@ namespace LAsOsuBeatmapParser.Beatmaps.Formats
             if (double.TryParse(parts[2], out double startTime))
                 spinner.StartTime = startTime;
 
+            if (float.TryParse(parts[0], out float x) && float.TryParse(parts[1], out float y))
+                spinner.Position = (X: x, Y: y);
+
             if (parts.Length > 5 && double.TryParse(parts[5], out double endTime))
-                spinner.EndTimeValue = endTime;
+                spinner.EndTime = endTime;
+
+            if (parts.Length > 4 && int.TryParse(parts[4], out int hitsound))
+                spinner.Hitsound = hitsound;
+
+            if (parts.Length > 6)
+                spinner.ObjectParams = string.Join(",", parts[6..]);
 
             return spinner;
         }
@@ -494,21 +548,26 @@ namespace LAsOsuBeatmapParser.Beatmaps.Formats
             if (double.TryParse(parts[2], out double startTime))
                 hold.StartTime = startTime;
 
+            if (parts.Length > 4 && int.TryParse(parts[4], out int hitsound))
+                hold.Hitsound = hitsound;
+
             if (parts.Length > 5)
             {
                 string[] holdParts = parts[5].Split(':');
                 if (holdParts.Length > 0 && double.TryParse(holdParts[0], out double endTime))
                     hold.EndTime = endTime;
+                if (holdParts.Length > 1)
+                    hold.HitSamples = holdParts[1];
             }
 
             // 根据 x 位置和键数计算列索引
-            if (float.TryParse(parts[0], out float x))
+            if (float.TryParse(parts[0], out float xPos))
             {
                 // 对于 Mania，x 位置决定音符所在列
                 // 使用官方的坐标转换公式：column = floor(x / (512 / keyCount))
                 int keyCount = (int)beatmap.Difficulty.CircleSize;
                 float ratio = 512f / keyCount;
-                hold.Column = (int)(x / ratio);
+                hold.Column = (int)(xPos / ratio);
                 hold.KeyCount = keyCount;
             }
 
@@ -522,23 +581,21 @@ namespace LAsOsuBeatmapParser.Beatmaps.Formats
             if (double.TryParse(parts[2], out double startTime))
                 maniaHit.StartTime = startTime;
 
-            // 根据 x 位置和键数计算列索引
+            // 解析 x, y 位置
             if (float.TryParse(parts[0], out float x) && float.TryParse(parts[1], out float y))
+            {
+                maniaHit.Position = (x, y);
+            }
+
+            // 根据 x 位置和键数计算列索引（用于兼容性）
+            if (float.TryParse(parts[0], out float xPos))
             {
                 int keyCount = (int)beatmap.Difficulty.CircleSize;
 
-                if (y == 0)
-                {
-                    // Old format: x directly represents column index
-                    maniaHit.Column = (int)x;
-                }
-                else
-                {
-                    // Standard format: calculate column from x position
-                    // 使用官方的坐标转换公式：column = floor(x / (512 / keyCount))
-                    float ratio = 512f / keyCount;
-                    maniaHit.Column = (int)(x / ratio);
-                }
+                // 标准格式：calculate column from x position
+                // 使用官方的坐标转换公式：column = floor(x / (512 / keyCount))
+                float ratio = 512f / keyCount;
+                maniaHit.Column = (int)(xPos / ratio);
 
                 maniaHit.KeyCount = keyCount;
             }
@@ -547,7 +604,10 @@ namespace LAsOsuBeatmapParser.Beatmaps.Formats
                 maniaHit.Hitsound = hitsound;
 
             if (parts.Length > 5)
-                maniaHit.ObjectParams = string.Join(",", parts[5..]);
+                maniaHit.HitSamples = parts[5];
+
+            if (parts.Length > 6)
+                maniaHit.ObjectParams = string.Join(",", parts[6..]);
 
             return maniaHit;
         }
@@ -640,7 +700,7 @@ namespace LAsOsuBeatmapParser.Beatmaps.Formats
 
                 break;
                 case "TimelineZoom":
-                    if (double.TryParse(value, out double timelineZoom))
+                    if (int.TryParse(value, out int timelineZoom))
                     {
                         beatmap.TimelineZoom = timelineZoom;
                         beatmap.TimelineZoomSet = true;

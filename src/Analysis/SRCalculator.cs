@@ -7,40 +7,95 @@ using LAsOsuBeatmapParser.Beatmaps;
 
 namespace LAsOsuBeatmapParser.Analysis
 {
-    public class Note
+    /// <summary>
+    /// SR算法专用Note类
+    /// </summary>
+    public class SRsNote
     {
-        public int K { get; set; }
-        public double H { get; set; }
-        public double T { get; set; }
+        /// <summary>
+        /// Key mode
+        /// </summary>
+        public int Index { get; set; }
 
-        public Note(int k, double h, double t)
+        /// <summary>
+        /// from start time of note
+        /// </summary>
+        public int StartTime { get; set; }
+
+        /// <summary>
+        /// from end time of tail, -1 if not LN
+        /// </summary>
+        public int EndTime { get; set; }
+
+        /// <summary>
+        /// 构造函数
+        /// </summary>
+        /// <param name="index"></param>
+        /// <param name="startTime"></param>
+        /// <param name="endTime"></param>
+        public SRsNote(int index, int startTime, int endTime)
         {
-            K = k;
-            H = h;
-            T = t;
+            Index = index;
+            StartTime = startTime;
+            EndTime = endTime;
         }
     }
 
-    public class NoteComparer : IComparer<Note>
+    /// <summary>
+    /// 快速排序比较器，先按StartTime排序，若相同则按Index排序
+    /// </summary>
+    public class NoteComparer : IComparer<SRsNote>
     {
-        public int Compare(Note a, Note b)
+        /// <summary>
+        /// 比较函数
+        /// </summary>
+        /// <param name="a"></param>
+        /// <param name="b"></param>
+        /// <returns></returns>
+        public int Compare(SRsNote? a, SRsNote? b)
         {
-            int cmp = a.H.CompareTo(b.H);
-            return cmp != 0 ? cmp : a.K.CompareTo(b.K);
+            if (a != null && b != null)
+            {
+                int cmp = a.StartTime.CompareTo(b.StartTime);
+                return cmp != 0
+                           ? cmp
+                           : a.Index.CompareTo(b.Index);
+            }
+
+            return 0;
         }
     }
 
-    public class NoteComparerByT : IComparer<Note>
+    /// <summary>
+    /// note比较器，按EndTime排序
+    /// </summary>
+    public class NoteComparerByT : IComparer<SRsNote>
     {
-        public int Compare(Note a, Note b)
+        /// <summary>
+        /// 比较函数
+        /// </summary>
+        /// <param name="a"></param>
+        /// <param name="b"></param>
+        /// <returns></returns>
+        public int Compare(SRsNote? a, SRsNote? b)
         {
-            return a.T.CompareTo(b.T);
+            if (a != null && b != null)
+                return a.EndTime.CompareTo(b.EndTime);
+
+            return 0;
         }
     }
 
+    /// <summary>
+    /// SR计算器，用于计算谱面的xxy SR值
+    /// <para></para>
+    /// From: https://github.com/sunnyxxy/Star-Rating-Rebirth
+    /// </summary>
     public class SRCalculator
     {
-        // 单例模式：无状态类，线程安全
+        /// <summary>
+        /// 单例模式：无状态类，线程安全
+        /// </summary>
         public static SRCalculator Instance { get; } = new SRCalculator();
 
         private SRCalculator() { } // 私有构造函数
@@ -82,45 +137,59 @@ namespace LAsOsuBeatmapParser.Analysis
             [0.4, 0.4, 0.2, 0.4, 0.2, 0.4, 0.2, 0.3, 0.1, 0.1, 0.3, 0.2, 0.4, 0.2, 0.4, 0.2, 0.4, 0.4, 0.4] // K=18 (wave: low-low-high-low-high-low-high-low-low-high-low-high-low-high)
         ];
 
-        // 极致性能优化：异步SR计算核心，已并行化所有section
-        // out times用于记录各部分计算时间
+        /// <summary>
+        /// 异步SR计算核心，已并行化所有section
+        /// </summary>
+        /// <param name="beatmap"></param>
+        /// <param name="times"></param>
+        /// <typeparam name="T"></typeparam>
+        /// <returns></returns>
         public double CalculateSR<T>(IBeatmap<T> beatmap, out Dictionary<string, long> times) where T : HitObject
         {
-            var task = CalculateSRAsync(beatmap);
-            var (sr, t) = task.Result; // 同步等待（用于兼容旧接口）
+            Task<(double sr, Dictionary<string, long> times)> task = CalculateSRAsync(beatmap);
+            (double sr, Dictionary<string, long> t) = task.Result; // 同步等待（用于兼容旧接口）
             times = t;
             return sr;
         }
 
-        // 极致性能优化：异步SR计算核心，已并行化所有section
-        // 返回 (sr, times) 元组
+        /// <summary>
+        /// 异步SR计算核心，已并行化所有section
+        /// </summary>
+        /// <param name="beatmap"></param>
+        /// <typeparam name="T"></typeparam>
+        /// <returns></returns>
         public async Task<(double sr, Dictionary<string, long> times)> CalculateSRAsync<T>(IBeatmap<T> beatmap) where T : HitObject
         {
             double od = beatmap.BeatmapInfo.Difficulty.OverallDifficulty;
-            int K = (int)beatmap.BeatmapInfo.Difficulty.CircleSize;
+            int cs = (int)beatmap.BeatmapInfo.Difficulty.CircleSize;
             var times = new Dictionary<string, long>();
 
             // Check if key count is supported (max 18 keys, even numbers only for K>10)
-            if (K > 18 || K < 1 || (K > 10 && K % 2 == 1))
-            {
-                return (-1, times); // Return invalid SR
-            }
+            if (cs > 18 || cs < 1 || (cs > 10 && cs % 2 == 1)) return (-1, times); // Return invalid SR
 
             try
             {
                 var totalStopwatch = Stopwatch.StartNew(); // 总时间计时开始
-                var noteSequence = new List<Note>();
+                var noteSequence = new List<SRsNote>();
 
-                foreach (var hitObject in beatmap.HitObjects)
+                foreach (T hitObject in beatmap.HitObjects)
                 {
-                    var col = (int)Math.Floor(hitObject.Position.X * K / 512.0);
-                    var time = hitObject.StartTime;
-                    var tail = hitObject.EndTime > hitObject.StartTime ? hitObject.EndTime : -1;
-                    noteSequence.Add(new Note(col, time, tail));
+                    int col;
+                    if (hitObject is ManiaHitObject maniaHit)
+                        col = maniaHit.Column;
+                    else
+                        col = (int)Math.Floor(hitObject.Position.X * cs / 512.0);
+
+                    if (col > 18)
+                        Console.WriteLine($"SRsNote Add, col:{col}");
+
+                    int time = (int)hitObject.StartTime;
+                    int tail = hitObject.EndTime > hitObject.StartTime ? (int)hitObject.EndTime : -1;
+                    noteSequence.Add(new SRsNote(col, time, tail));
                 }
 
                 // 优化：避免多次LINQ排序，使用Array.Sort，并使用Span优化
-                var noteSeq = noteSequence.ToArray();
+                SRsNote[] noteSeq = noteSequence.ToArray();
 
                 // Handle empty note sequence
                 if (noteSeq.Length == 0)
@@ -131,34 +200,37 @@ namespace LAsOsuBeatmapParser.Analysis
 
                 Array.Sort(noteSeq, new NoteComparer());
 
-                var x = 0.3 * Math.Sqrt((64.5 - Math.Ceiling(od * 3)) / 500);
+                double x = 0.3 * Math.Sqrt((64.5 - Math.Ceiling(od * 3)) / 500);
 
-                var noteSeqByColumn = noteSeq.GroupBy(n => n.K).OrderBy(g => g.Key).Select(g => g.ToArray()).ToArray();
+                SRsNote[][] noteSeqByColumn = noteSeq.GroupBy(n => n.Index).OrderBy(g => g.Key).Select(g => g.ToArray()).ToArray();
 
                 // 优化：预计算LN序列长度，避免Where().ToArray()
-                var lnCount = 0;
-                foreach (var note in noteSeq)
-                    if (note.T >= 0) lnCount++;
+                int lnCount = 0;
+                foreach (SRsNote note in noteSeq)
+                    if (note.EndTime >= 0)
+                        lnCount++;
 
-                var LNSeq = new Note[lnCount];
-                var lnIndex = 0;
-                foreach (var note in noteSeq)
-                    if (note.T >= 0) LNSeq[lnIndex++] = note;
+                var LNSeq = new SRsNote[lnCount];
+                int lnIndex = 0;
+                foreach (SRsNote note in noteSeq)
+                    if (note.EndTime >= 0)
+                        LNSeq[lnIndex++] = note;
 
                 // 优化：直接排序LNSeq而不是创建新数组
                 Array.Sort(LNSeq, new NoteComparerByT());
-                var tailSeq = LNSeq;
+                SRsNote[] tailSeq = LNSeq;
 
-                var LNDict = new Dictionary<int, List<Note>>();
-                foreach (var note in LNSeq)
+                var LNDict = new Dictionary<int, List<SRsNote>>();
+
+                foreach (SRsNote note in LNSeq)
                 {
-                    if (!LNDict.ContainsKey(note.K))
-                        LNDict[note.K] = new List<Note>();
-                    LNDict[note.K].Add(note);
+                    if (!LNDict.ContainsKey(note.Index))
+                        LNDict[note.Index] = new List<SRsNote>();
+                    LNDict[note.Index].Add(note);
                 }
 
                 // Calculate T
-                var totalTime = (int)(Math.Max(noteSeq.Max(n => n.H), noteSeq.Max(n => n.T)) + 1);
+                int totalTime = Math.Max(noteSeq.Max(n => n.StartTime), noteSeq.Max(n => n.EndTime)) + 1;
 
                 var stopwatch = new Stopwatch();
 
@@ -167,26 +239,26 @@ namespace LAsOsuBeatmapParser.Analysis
 
                 // Define tasks for each section
                 // 优化：使用并行任务加速Section 23/24/25的计算
-                var task23 = Task.Run(() =>
+                Task<(double[] jBar, double[][] deltaKsResult)> task23 = Task.Run(() =>
                 {
                     var sectionStopwatch = Stopwatch.StartNew();
-                    var (jBar, deltaKsResult) = CalculateSection23(K, noteSeqByColumn, totalTime, x);
+                    (double[] jBar, double[][] deltaKsResult) = CalculateSection23(cs, noteSeqByColumn, totalTime, x);
                     sectionStopwatch.Stop();
                     return (jBar, deltaKsResult);
                 });
 
-                var task24 = Task.Run(() =>
+                Task<double[]> task24 = Task.Run(() =>
                 {
                     var sectionStopwatch = Stopwatch.StartNew();
-                    var XBar = CalculateSection24(K, totalTime, noteSeqByColumn, x);
+                    double[] XBar = CalculateSection24(cs, totalTime, noteSeqByColumn, x);
                     sectionStopwatch.Stop();
                     return XBar;
                 });
 
-                var task25 = Task.Run(() =>
+                Task<double[]> task25 = Task.Run(() =>
                 {
                     var sectionStopwatch = Stopwatch.StartNew();
-                    var PBar = CalculateSection25(totalTime, LNSeq, noteSeq, x);
+                    double[] PBar = CalculateSection25(totalTime, LNSeq, noteSeq, x);
                     sectionStopwatch.Stop();
                     return PBar;
                 });
@@ -195,24 +267,24 @@ namespace LAsOsuBeatmapParser.Analysis
                 await Task.WhenAll(task23, task24, task25).ConfigureAwait(false);
 
                 // Retrieve results
-                var (JBar, deltaKs) = task23.Result;
-                var XBar = task24.Result;
-                var PBar = task25.Result;
+                (double[] JBar, double[][] deltaKs) = task23.Result;
+                double[] XBar = task24.Result;
+                double[] PBar = task25.Result;
 
                 stopwatch.Stop();
                 // Logger.WriteLine(LogLevel.Debug, $"[SRCalculator]Section 23/24/25 Time: {stopwatch.ElapsedMilliseconds}ms");
                 times["Section232425"] = stopwatch.ElapsedMilliseconds;
 
                 stopwatch.Restart();
-                var task26 = Task.Run(() => CalculateSection26(deltaKs, K, totalTime, noteSeq));
-                var task27 = Task.Run(() => CalculateSection27(LNSeq, tailSeq, totalTime, noteSeqByColumn, x));
+                Task<(double[] ABar, int[] KS)> task26 = Task.Run(() => CalculateSection26(deltaKs, cs, totalTime, noteSeq));
+                Task<(double[] RBar, double[] Is)> task27 = Task.Run(() => CalculateSection27(LNSeq, tailSeq, totalTime, noteSeqByColumn, x));
 
                 // Wait for both tasks to complete
                 await Task.WhenAll(task26, task27).ConfigureAwait(false);
 
                 // Retrieve results
-                var (ABar, KS) = task26.Result;
-                var (RBar, _) = task27.Result;
+                (double[] ABar, int[] KS) = task26.Result;
+                (double[] RBar, _) = task27.Result;
 
                 stopwatch.Stop();
                 // Logger.WriteLine(LogLevel.Debug, $"[SRCalculator]Section 26/27 Time: {stopwatch.ElapsedMilliseconds}ms");
@@ -220,7 +292,7 @@ namespace LAsOsuBeatmapParser.Analysis
 
                 // Final calculation
                 stopwatch.Restart();
-                var result = CalculateSection3(JBar, XBar, PBar, ABar, RBar, KS, totalTime, noteSeq, LNSeq, K);
+                double result = CalculateSection3(JBar, XBar, PBar, ABar, RBar, KS, totalTime, noteSeq, LNSeq, cs);
                 stopwatch.Stop();
                 // Logger.WriteLine(LogLevel.Debug, $"[SRCalculator]Section 3 Time: {stopwatch.ElapsedMilliseconds}ms");
                 times["Section3"] = stopwatch.ElapsedMilliseconds;
@@ -241,19 +313,20 @@ namespace LAsOsuBeatmapParser.Analysis
         private double[] Smooth(double[] lst, int T)
         {
             ReadOnlySpan<double> lstSpan = lst;
-            var prefixSum = new double[T + 1];
+            double[] prefixSum = new double[T + 1];
             Span<double> prefixSpan = prefixSum;
             prefixSpan[0] = 0;
-            for (var i = 1; i <= T; i++)
+            for (int i = 1; i <= T; i++)
                 prefixSpan[i] = prefixSpan[i - 1] + lstSpan[i - 1];
 
-            var lstBar = new double[T];
+            double[] lstBar = new double[T];
             Span<double> lstBarSpan = lstBar;
-            for (var s = 0; s < T; s += granularity)
+
+            for (int s = 0; s < T; s += granularity)
             {
-                var left = Math.Max(0, s - 500);
-                var right = Math.Min(T, s + 500);
-                var sum = prefixSpan[right] - prefixSpan[left];
+                int left = Math.Max(0, s - 500);
+                int right = Math.Min(T, s + 500);
+                double sum = prefixSpan[right] - prefixSpan[left];
                 lstBarSpan[s] = 0.001 * sum; // 因为步长是1ms，不允许修改
             }
 
@@ -263,15 +336,15 @@ namespace LAsOsuBeatmapParser.Analysis
         private double[] Smooth2(double[] lst, int T)
         {
             ReadOnlySpan<double> lstSpan = lst;
-            var lstBar = new double[T];
+            double[] lstBar = new double[T];
             Span<double> lstBarSpan = lstBar;
-            var windowSum = 0.0;
-            var windowLen = Math.Min(500, T);
+            double windowSum = 0.0;
+            int windowLen = Math.Min(500, T);
 
-            for (var i = 0; i < windowLen; i += granularity)
+            for (int i = 0; i < windowLen; i += granularity)
                 windowSum += lstSpan[i];
 
-            for (var s = 0; s < T; s += granularity)
+            for (int s = 0; s < T; s += granularity)
             {
                 lstBarSpan[s] = windowSum / windowLen * granularity;
 
@@ -291,43 +364,43 @@ namespace LAsOsuBeatmapParser.Analysis
             return lstBar;
         }
 
-
-
-        private (double[] JBar, double[][] deltaKs) CalculateSection23(int K, Note[][] noteSeqByColumn, int T, double x)
+        private (double[] JBar, double[][] deltaKs) CalculateSection23(int K, SRsNote[][] noteSeqByColumn, int T, double x)
         {
-            var JKs = new double[K][];
-            var deltaKs = new double[K][];
+            double[][] JKs = new double[K][];
+            double[][] deltaKs = new double[K][];
 
             if (K > 7)
             {
                 // 局部变量，避免lambda捕获大对象
-                var localNoteSeqByColumn = noteSeqByColumn;
-                var localT = T;
-                var localX = x;
+                SRsNote[][] localNoteSeqByColumn = noteSeqByColumn;
+                int localT = T;
+                double localX = x;
                 Parallel.For(0, K, k =>
                 {
                     JKs[k] = new double[localT];
                     deltaKs[k] = new double[localT];
                     Array.Fill(deltaKs[k], 1e9);
 
-                // 预计算复杂表达式，减少重复计算
-                var xPow025 = Math.Sqrt(Math.Sqrt(localX));
-                var lambda1X = lambda_1 * xPow025;                    // 只有当该列有音符时才处理
+                    // 预计算复杂表达式，减少重复计算
+                    double xPow025 = Math.Sqrt(Math.Sqrt(localX));
+                    double lambda1X = lambda_1 * xPow025; // 只有当该列有音符时才处理
+
                     if (k < localNoteSeqByColumn.Length && localNoteSeqByColumn[k].Length > 1)
                     {
-                        for (var i = 0; i < localNoteSeqByColumn[k].Length - 1; i++)
+                        for (int i = 0; i < localNoteSeqByColumn[k].Length - 1; i++)
                         {
-                            var delta = 0.001 * (localNoteSeqByColumn[k][i + 1].H - localNoteSeqByColumn[k][i].H);
-                            var absDelta = Math.Abs(delta - 0.08);
-                            var temp = 0.15 + absDelta;
-                            var temp4 = temp * temp * temp * temp;
-                            var jack = 1 - 7e-5 * (1 / temp4);
-                            var val = (1 / (delta * (delta + lambda1X))) * jack;
+                            double delta = 0.001 * (localNoteSeqByColumn[k][i + 1].StartTime - localNoteSeqByColumn[k][i].StartTime);
+                            if (delta < 1e-9) continue; // 避免除零错误
+                            double absDelta = Math.Abs(delta - 0.08);
+                            double temp = 0.15 + absDelta;
+                            double temp4 = temp * temp * temp * temp;
+                            double jack = 1 - 7e-5 * (1 / temp4);
+                            double val = 1 / (delta * (delta + lambda1X)) * jack;
 
                             // Define start and end for filling the range in deltaKs and JKs
-                            var start = (int)localNoteSeqByColumn[k][i].H;
-                            var end = (int)localNoteSeqByColumn[k][i + 1].H;
-                            var length = end - start;
+                            int start = (int)localNoteSeqByColumn[k][i].StartTime;
+                            int end = (int)localNoteSeqByColumn[k][i + 1].StartTime;
+                            int length = end - start;
 
                             // Use Span to fill subarrays
                             var deltaSpan = new Span<double>(deltaKs[k], start, length);
@@ -347,24 +420,26 @@ namespace LAsOsuBeatmapParser.Analysis
                     deltaKs[k] = new double[T];
                     Array.Fill(deltaKs[k], 1e9);
 
-                // 预计算复杂表达式，减少重复计算
-                var xPow025 = Math.Sqrt(Math.Sqrt(x));
-                var lambda1X = lambda_1 * xPow025;                    // 只有当该列有音符时才处理
+                    // 预计算复杂表达式，减少重复计算
+                    double xPow025 = Math.Sqrt(Math.Sqrt(x));
+                    double lambda1X = lambda_1 * xPow025; // 只有当该列有音符时才处理
+
                     if (k < noteSeqByColumn.Length && noteSeqByColumn[k].Length > 1)
                     {
-                        for (var i = 0; i < noteSeqByColumn[k].Length - 1; i++)
+                        for (int i = 0; i < noteSeqByColumn[k].Length - 1; i++)
                         {
-                            var delta = 0.001 * (noteSeqByColumn[k][i + 1].H - noteSeqByColumn[k][i].H);
-                            var absDelta = Math.Abs(delta - 0.08);
-                            var temp = 0.15 + absDelta;
-                            var temp4 = temp * temp * temp * temp;
-                            var jack = 1 - 7e-5 * (1 / temp4);
-                            var val = (1 / (delta * (delta + lambda1X))) * jack;
+                            double delta = 0.001 * (noteSeqByColumn[k][i + 1].StartTime - noteSeqByColumn[k][i].StartTime);
+                            if (delta < 1e-9) continue; // 避免除零错误
+                            double absDelta = Math.Abs(delta - 0.08);
+                            double temp = 0.15 + absDelta;
+                            double temp4 = temp * temp * temp * temp;
+                            double jack = 1 - 7e-5 * (1 / temp4);
+                            double val = 1 / (delta * (delta + lambda1X)) * jack;
 
                             // Define start and end for filling the range in deltaKs and JKs
-                            var start = (int)noteSeqByColumn[k][i].H;
-                            var end = (int)noteSeqByColumn[k][i + 1].H;
-                            var length = end - start;
+                            int start = noteSeqByColumn[k][i].StartTime;
+                            int end = noteSeqByColumn[k][i + 1].StartTime;
+                            int length = end - start;
 
                             // Use Span to fill subarrays
                             var deltaSpan = new Span<double>(deltaKs[k], start, length);
@@ -378,21 +453,22 @@ namespace LAsOsuBeatmapParser.Analysis
             }
 
             // Smooth the JKs array，让系统自动调度
-            var JBarKs = new double[K][];
+            double[][] JBarKs = new double[K][];
             Parallel.For(0, K, k => JBarKs[k] = Smooth(JKs[k], T));
 
             // Calculate JBar
-            var JBar = new double[T];
-            for (var s = 0; s < T; s += granularity)
+            double[] JBar = new double[T];
+
+            for (int s = 0; s < T; s += granularity)
             {
                 double weightedSum = 0;
                 double weightSum = 0;
 
                 // Replace list allocation with direct accumulation
-                for (var i = 0; i < K; i++)
+                for (int i = 0; i < K; i++)
                 {
-                    var val = JBarKs[i][s];
-                    var weight = 1.0 / deltaKs[i][s];
+                    double val = JBarKs[i][s];
+                    double weight = 1.0 / deltaKs[i][s];
 
                     weightSum += weight;
                     weightedSum += Math.Pow(Math.Max(val, 0), lambda_n) * weight;
@@ -405,131 +481,132 @@ namespace LAsOsuBeatmapParser.Analysis
             return (JBar, deltaKs);
         }
 
-        private double[] CalculateSection24(int K, int T, Note[][] noteSeqByColumn, double x)
+        private double[] CalculateSection24(int K, int T, SRsNote[][] noteSeqByColumn, double x)
         {
-            var XKs = new double[K + 1][];
+            double[][] XKs = new double[K + 1][];
 
             Parallel.For(0, K + 1, k =>
             {
                 XKs[k] = new double[T];
-                Note[] notesInPair;
+                SRsNote[] notesInPair;
+
                 if (k == 0)
-                {
                     notesInPair = noteSeqByColumn.Length > 0 ? noteSeqByColumn[0] : [];
-                }
                 else if (k == K)
-                {
                     notesInPair = noteSeqByColumn.Length > 0 ? noteSeqByColumn[^1] : [];
-                }
                 else
                 {
-                    var leftCol = k - 1;
-                    var rightCol = k;
-                    var leftNotes = leftCol < noteSeqByColumn.Length ? noteSeqByColumn[leftCol] : [];
-                    var rightNotes = rightCol < noteSeqByColumn.Length ? noteSeqByColumn[rightCol] : [];
-                    notesInPair = leftNotes.Concat(rightNotes).OrderBy(n => n.H).ToArray();
+                    int leftCol = k - 1;
+                    int rightCol = k;
+                    SRsNote[] leftNotes = leftCol < noteSeqByColumn.Length ? noteSeqByColumn[leftCol] : [];
+                    SRsNote[] rightNotes = rightCol < noteSeqByColumn.Length ? noteSeqByColumn[rightCol] : [];
+                    notesInPair = leftNotes.Concat(rightNotes).OrderBy(n => n.StartTime).ToArray();
                 }
-                Span<double> XKsSpan = XKs[k];
-                for (var i = 1; i < notesInPair.Length; i++)
-                {
-                    var delta = 0.001 * (notesInPair[i].H - notesInPair[i - 1].H);
-                    var maxXd = Math.Max(x, delta);
-                    var val = 0.16 / (maxXd * maxXd);
 
-                    var start = (int)notesInPair[i - 1].H;
-                    var end = (int)notesInPair[i].H;
-                    var length = end - start;
+                Span<double> XKsSpan = XKs[k];
+
+                for (int i = 1; i < notesInPair.Length; i++)
+                {
+                    double delta = 0.001 * (notesInPair[i].StartTime - notesInPair[i - 1].StartTime);
+                    double maxXd = Math.Max(x, delta);
+                    double val = 0.16 / (maxXd * maxXd);
+
+                    int start = notesInPair[i - 1].StartTime;
+                    int end = notesInPair[i].StartTime;
+                    int length = end - start;
                     XKsSpan.Slice(start, length).Fill(val);
                 }
             });
 
-            var X = new double[T];
-            for (var s = 0; s < T; s += granularity)
+            double[] X = new double[T];
+
+            for (int s = 0; s < T; s += granularity)
             {
                 X[s] = 0;
-                for (var k = 0; k <= K; k++) X[s] += XKs[k][s] * crossMatrix[K][k];
+                for (int k = 0; k <= K; k++) X[s] += XKs[k][s] * crossMatrix[K][k];
             }
 
             return Smooth(X, T);
         }
 
-        private double[] CalculateSection25(int T, Note[] LNSeq, Note[] noteSeq, double x)
+        private double[] CalculateSection25(int T, SRsNote[] LNSeq, SRsNote[] noteSeq, double x)
         {
-            var P = new double[T];
-            var LNBodies = new double[T];
+            double[] P = new double[T];
+            double[] LNBodies = new double[T];
 
             // 简化：使用系统默认的线程数，避免过度限制
-            var numThreads = Environment.ProcessorCount;
-            var partialLNBodies = new double[numThreads * T];
+            int numThreads = Environment.ProcessorCount;
+            double[] partialLNBodies = new double[numThreads * T];
 
             Parallel.For(0, LNSeq.Length, i =>
             {
-                var threadId = i % numThreads;
-                var offset = threadId * T;
-                var note = LNSeq[i];
-                var t1 = Math.Min(note.H + 80, note.T);
-                for (var t = (int)note.H; t < (int)t1; t++)
+                int threadId = i % numThreads;
+                int offset = threadId * T;
+                SRsNote note = LNSeq[i];
+                int t1 = Math.Min(note.StartTime + 80, note.EndTime);
+                for (int t = note.StartTime; t < t1; t++)
                     partialLNBodies[offset + t] += 0.5;
-                for (var t = (int)t1; t < (int)note.T; t++)
+                for (int t = t1; t < note.EndTime; t++)
                     partialLNBodies[offset + t] += 1;
             });
 
             // 合并结果
-            for (var t = 0; t < T; t++)
+            for (int t = 0; t < T; t++)
             {
-                for (var i = 0; i < numThreads; i++)
+                for (int i = 0; i < numThreads; i++)
                     LNBodies[t] += partialLNBodies[i * T + t];
             }
 
             // 优化：计算 LNBodies 前缀和，用于快速求和
-            var prefixSumLNBodies = new double[T + 1];
-            for (var t = 1; t <= T; t++)
+            double[] prefixSumLNBodies = new double[T + 1];
+            for (int t = 1; t <= T; t++)
                 prefixSumLNBodies[t] = prefixSumLNBodies[t - 1] + LNBodies[t - 1];
 
             double B(double delta)
             {
-                var val = 7.5 / delta;
+                double val = 7.5 / delta;
+
                 if (val is > 160 and < 360)
                 {
-                    var diff = val - 160;
-                    var diff2 = val - 360;
+                    double diff = val - 160;
+                    double diff2 = val - 360;
                     return 1 + 1.4e-7 * diff * (diff2 * diff2);
                 }
+
                 return 1;
             }
 
             // 预计算常量，减少重复计算
-            var lambda2Scaled = lambda_2 * 0.001;
+            double lambda2Scaled = lambda_2 * 0.001;
 
-            for (var i = 0; i < noteSeq.Length - 1; i++)
+            for (int i = 0; i < noteSeq.Length - 1; i++)
             {
-                var delta = 0.001 * (noteSeq[i + 1].H - noteSeq[i].H);
+                double delta = 0.001 * (noteSeq[i + 1].StartTime - noteSeq[i].StartTime);
+
                 if (delta < 1e-9)
-                {
-                    P[(int)noteSeq[i].H] += 1000 * Math.Sqrt(Math.Sqrt(0.02 * (4 / x - lambda_3)));
-                }
+                    P[noteSeq[i].StartTime] += 1000 * Math.Sqrt(Math.Sqrt(0.02 * (4 / x - lambda_3)));
                 else
                 {
-                    var h_l = (int)noteSeq[i].H;
-                    var h_r = (int)noteSeq[i + 1].H;
-                    var v = 1 + lambda2Scaled * (prefixSumLNBodies[h_r] - prefixSumLNBodies[h_l]);
+                    int h_l = noteSeq[i].StartTime;
+                    int h_r = noteSeq[i + 1].StartTime;
+                    double v = 1 + lambda2Scaled * (prefixSumLNBodies[h_r] - prefixSumLNBodies[h_l]);
 
                     if (delta < 2 * x / 3)
                     {
-                        var baseVal = Math.Sqrt(Math.Sqrt(0.08 / x *
-                                               (1 - lambda_3 / x * (delta - x / 2) * (delta - x / 2)))) *
-                            B(delta) * v / delta;
+                        double baseVal = Math.Sqrt(Math.Sqrt(0.08 / x *
+                                                             (1 - lambda_3 / x * (delta - x / 2) * (delta - x / 2)))) *
+                                         B(delta) * v / delta;
 
-                        for (var s = h_l; s < h_r; s++)
+                        for (int s = h_l; s < h_r; s++)
                             P[s] += baseVal;
                     }
                     else
                     {
-                        var baseVal = Math.Sqrt(Math.Sqrt(0.08 / x *
-                                               (1 - lambda_3 / x * (x / 6) * (x / 6)))) *
-                            B(delta) * v / delta;
+                        double baseVal = Math.Sqrt(Math.Sqrt(0.08 / x *
+                                                             (1 - lambda_3 / x * (x / 6) * (x / 6)))) *
+                                         B(delta) * v / delta;
 
-                        for (var s = h_l; s < h_r; s++)
+                        for (int s = h_l; s < h_r; s++)
                             P[s] += baseVal;
                     }
                 }
@@ -538,48 +615,51 @@ namespace LAsOsuBeatmapParser.Analysis
             return Smooth(P, T);
         }
 
-        private (double[] ABar, int[] KS) CalculateSection26(double[][] deltaKs, int K, int T, Note[] noteSeq)
+        private (double[] ABar, int[] KS) CalculateSection26(double[][] deltaKs, int K, int T, SRsNote[] noteSeq)
         {
-            var KUKs = new bool[K][];
-            for (var k = 0; k < K; k++) KUKs[k] = new bool[T];
+            bool[][] KUKs = new bool[K][];
+            for (int k = 0; k < K; k++) KUKs[k] = new bool[T];
 
             // 并行化：每个note独立填充KUKs，优化性能
             Parallel.ForEach(noteSeq, note =>
             {
-                var startTime = Math.Max(0, (int)note.H - 500);
-                var endTime = note.T < 0 ? Math.Min((int)note.H + 500, T - 1) : Math.Min((int)note.T + 500, T - 1);
+                int startTime = Math.Max(0, note.StartTime - 500);
+                int endTime = note.EndTime < 0 ? Math.Min(note.StartTime + 500, T - 1) : Math.Min(note.EndTime + 500, T - 1);
 
-                for (var s = startTime; s < endTime; s++) KUKs[note.K][s] = true;
+                for (int s = startTime; s < endTime; s++) KUKs[note.Index][s] = true;
             });
 
-            var KS = new int[T];
-            var A = new double[T];
+            int[] KS = new int[T];
+            double[] A = new double[T];
             Array.Fill(A, 1);
 
-            var dks = new double[K - 1][];
-            for (var k = 0; k < K - 1; k++) dks[k] = new double[T];
+            double[][] dks = new double[K - 1][];
+            for (int k = 0; k < K - 1; k++) dks[k] = new double[T];
 
             // 并行化：每个s独立计算，优化性能
             Parallel.For(0, T / granularity, sIndex =>
             {
-                var s = sIndex * granularity;
-                var cols = new int[K]; // 使用数组而不是List
-                var colCount = 0;
-                for (var k = 0; k < K; k++)
+                int s = sIndex * granularity;
+                int[] cols = new int[K]; // 使用数组而不是List
+                int colCount = 0;
+
+                for (int k = 0; k < K; k++)
+                {
                     if (KUKs[k][s])
                         cols[colCount++] = k;
+                }
 
                 KS[s] = Math.Max(colCount, 1);
 
-                for (var i = 0; i < colCount - 1; i++)
+                for (int i = 0; i < colCount - 1; i++)
                 {
-                    var col1 = cols[i];
-                    var col2 = cols[i + 1];
+                    int col1 = cols[i];
+                    int col2 = cols[i + 1];
 
                     dks[col1][s] = Math.Abs(deltaKs[col1][s] - deltaKs[col2][s]) +
                                    Math.Max(0, Math.Max(deltaKs[col1][s], deltaKs[col2][s]) - 0.3);
 
-                    var maxDelta = Math.Max(deltaKs[col1][s], deltaKs[col2][s]);
+                    double maxDelta = Math.Max(deltaKs[col1][s], deltaKs[col2][s]);
                     if (dks[col1][s] < 0.02)
                         A[s] *= Math.Min(0.75 + 0.5 * maxDelta, 1);
                     else if (dks[col1][s] < 0.07) A[s] *= Math.Min(0.65 + 5 * dks[col1][s] + 0.5 * maxDelta, 1);
@@ -589,43 +669,44 @@ namespace LAsOsuBeatmapParser.Analysis
             return (Smooth2(A, T), KS);
         }
 
-        private Note FindNextNoteInColumn(Note note, Note[] columnNotes)
+        private SRsNote FindNextNoteInColumn(SRsNote sRsNote, SRsNote[] columnNotes)
         {
-            var index = Array.BinarySearch(columnNotes, note, Comparer<Note>.Create((a, b) => a.H.CompareTo(b.H)));
+            int index = Array.BinarySearch(columnNotes, sRsNote, Comparer<SRsNote>.Create((a, b) => a.StartTime.CompareTo(b.StartTime)));
 
             // If the exact element is not found, BinarySearch returns a bitwise complement of the index.
             // Convert it to the nearest index of an element >= note.H
             if (index < 0) index = ~index;
 
             return index + 1 < columnNotes.Length
-                ? columnNotes[index + 1]
-                : new Note(0, (int)1e9, (int)1e9);
+                       ? columnNotes[index + 1]
+                       : new SRsNote(0, 1000000000, 1000000000);
         }
 
-        private (double[] RBar, double[] Is) CalculateSection27(Note[] LNSeq, Note[] tailSeq, int T, Note[][] noteSeqByColumn, double x)
+        private (double[] RBar, double[] Is) CalculateSection27(SRsNote[] LNSeq, SRsNote[] tailSeq, int T, SRsNote[][] noteSeqByColumn, double x)
         {
-            var I = new double[LNSeq.Length];
+            double[] I = new double[LNSeq.Length];
             Parallel.For(0, tailSeq.Length, i =>
             {
-                var (k, h_i, t_i) = (tailSeq[i].K, (int)tailSeq[i].H, (int)tailSeq[i].T);
-                var columnNotes = k < noteSeqByColumn.Length ? noteSeqByColumn[k] : [];
-                var nextNote = FindNextNoteInColumn(tailSeq[i], columnNotes);
-                var (_, h_j, _) = (nextNote.K, (int)nextNote.H, nextNote.T);
+                (int k, int h_i, int t_i) = (tailSeq[i].Index, tailSeq[i].StartTime, tailSeq[i].EndTime);
+                SRsNote[] columnNotes = k < noteSeqByColumn.Length ? noteSeqByColumn[k] : [];
+                SRsNote nextNote = FindNextNoteInColumn(tailSeq[i], columnNotes);
+                (_, int h_j, _) = (nextNote.Index, nextNote.StartTime, nextNote.EndTime);
 
-                var I_h = 0.001 * Math.Abs(t_i - h_i - 80) / x;
-                var I_t = 0.001 * Math.Abs(h_j - t_i - 80) / x;
+                double I_h = 0.001 * Math.Abs(t_i - h_i - 80) / x;
+                double I_t = 0.001 * Math.Abs(h_j - t_i - 80) / x;
                 I[i] = 2 / (2 + Math.Exp(-5 * (I_h - 0.75)) + Math.Exp(-5 * (I_t - 0.75)));
             });
 
-            var Is = new double[T];
-            var R = new double[T];
+            double[] Is = new double[T];
+            double[] R = new double[T];
 
             Parallel.For(0, tailSeq.Length - 1, i =>
             {
-                var delta_r = 0.001 * (tailSeq[i + 1].T - tailSeq[i].T);
-                var isVal = 1 + I[i];
-                var rVal = 0.08 * Math.Pow(delta_r, -1.0 / 2) * Math.Pow(x, -1) * (1 + lambda_4 * (I[i] + I[i + 1]));
-                for (var s = (int)tailSeq[i].T; s < (int)tailSeq[i + 1].T; s++)
+                double delta_r = 0.001 * (tailSeq[i + 1].EndTime - tailSeq[i].EndTime);
+                double isVal = 1 + I[i];
+                double rVal = 0.08 * Math.Pow(delta_r, -1.0 / 2) * Math.Pow(x, -1) * (1 + lambda_4 * (I[i] + I[i + 1]));
+
+                for (int s = tailSeq[i].EndTime; s < tailSeq[i + 1].EndTime; s++)
                 {
                     Is[s] = isVal;
                     R[s] = rVal;
@@ -639,30 +720,41 @@ namespace LAsOsuBeatmapParser.Analysis
         {
             double lastValidValue = 0; // Use initialValue for leading NaNs and 0s
 
-            for (var i = 0; i < array.Length; i++)
+            for (int i = 0; i < array.Length; i++)
+            {
                 if (!double.IsNaN(array[i]) && array[i] != 0) // Check if the current value is valid (not NaN or 0)
                     lastValidValue = array[i];
                 else
                     array[i] = lastValidValue; // Replace NaN or 0 with last valid value or initial value
+            }
         }
 
-        private double CalculateSection3(double[] JBar, double[] XBar, double[] PBar,
-            double[] ABar, double[] RBar, int[] KS, int T, Note[] noteSeq, Note[] LNSeq, int K)
+        private double CalculateSection3(
+            double[] JBar,
+            double[] XBar,
+            double[] PBar,
+            double[] ABar,
+            double[] RBar,
+            int[] KS,
+            int T,
+            SRsNote[] noteSeq,
+            SRsNote[] LNSeq,
+            int K)
         {
-            var C = new double[T];
+            double[] C = new double[T];
             int start = 0, end = 0;
 
-            for (var t = 0; t < T; t++)
+            for (int t = 0; t < T; t++)
             {
-                while (start < noteSeq.Length && noteSeq[start].H < t - 500)
+                while (start < noteSeq.Length && noteSeq[start].StartTime < t - 500)
                     start++;
-                while (end < noteSeq.Length && noteSeq[end].H < t + 500)
+                while (end < noteSeq.Length && noteSeq[end].StartTime < t + 500)
                     end++;
                 C[t] = end - start;
             }
 
-            var S = new double[T];
-            var D = new double[T];
+            double[] S = new double[T];
+            double[] D = new double[T];
 
             // 并行化计算S和D
             Parallel.For(0, T, t =>
@@ -674,23 +766,23 @@ namespace LAsOsuBeatmapParser.Analysis
                 ABar[t] = Math.Max(0, ABar[t]);
                 RBar[t] = Math.Max(0, RBar[t]);
 
-                var term1 = Math.Pow(w_0 * Math.Pow(Math.Pow(ABar[t], 3.0 / KS[t]) * JBar[t], 1.5), 1);
-                var term2 = Math.Pow((1 - w_0) * Math.Pow(Math.Pow(ABar[t], 2.0 / 3) *
-                                                          (0.8 * PBar[t] + RBar[t]), 1.5), 1);
+                double term1 = Math.Pow(w_0 * Math.Pow(Math.Pow(ABar[t], 3.0 / KS[t]) * JBar[t], 1.5), 1);
+                double term2 = Math.Pow((1 - w_0) * Math.Pow(Math.Pow(ABar[t], 2.0 / 3) *
+                                                             (0.8 * PBar[t] + RBar[t]), 1.5), 1);
                 S[t] = Math.Pow(term1 + term2, 2.0 / 3);
 
-                var T_t = Math.Pow(ABar[t], 3.0 / KS[t]) * XBar[t] / (XBar[t] + S[t] + 1);
+                double T_t = Math.Pow(ABar[t], 3.0 / KS[t]) * XBar[t] / (XBar[t] + S[t] + 1);
                 D[t] = w_1 * Math.Pow(S[t], 1.0 / 2) * Math.Pow(T_t, p_1) + S[t] * w_2;
             });
 
             ForwardFill(D);
             ForwardFill(C);
 
-            var weightedSum = 0.0;
-            var weightSum = C.Sum();
-            for (var t = 0; t < T; t++) weightedSum += Math.Pow(D[t], lambda_n) * C[t];
+            double weightedSum = 0.0;
+            double weightSum = C.Sum();
+            for (int t = 0; t < T; t++) weightedSum += Math.Pow(D[t], lambda_n) * C[t];
 
-            var SR = Math.Pow(weightedSum / weightSum, 1.0 / lambda_n);
+            double SR = Math.Pow(weightedSum / weightSum, 1.0 / lambda_n);
 
             SR = Math.Pow(SR, p_0) / Math.Pow(8, p_0) * 8;
             SR *= (noteSeq.Length + 0.5 * LNSeq.Length) / (noteSeq.Length + 0.5 * LNSeq.Length + 60);
@@ -699,21 +791,6 @@ namespace LAsOsuBeatmapParser.Analysis
                 SR = Math.Sqrt(SR * 2);
             SR *= 0.96 + 0.01 * K;
             return SR;
-        }
-
-        public List<Note> getNotes<T>(IBeatmap<T> beatmap) where T : HitObject
-        {
-            var notes = new List<Note>();
-            double cs = beatmap.BeatmapInfo.Difficulty.CircleSize;
-            foreach (var hitObject in beatmap.HitObjects)
-            {
-                var col = (int)Math.Floor(hitObject.Position.X * cs / 512.0);
-                var time = hitObject.StartTime;
-                var tail = hitObject.EndTime > hitObject.StartTime ? hitObject.EndTime : -1;
-                notes.Add(new Note(col, time, tail));
-            }
-
-            return notes;
         }
     }
 }

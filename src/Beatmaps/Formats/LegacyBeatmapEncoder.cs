@@ -12,10 +12,24 @@ namespace LAsOsuBeatmapParser.Beatmaps.Formats;
 public class LegacyBeatmapEncoder
 {
     /// <summary>
+    /// 是否使用 lazer 版本格式 (v128)。
+    /// </summary>
+    public bool UseLazerVersion { get; set; }
+
+    /// <summary>
     /// 创建 LegacyBeatmapEncoder。
     /// </summary>
     public LegacyBeatmapEncoder()
     {
+    }
+
+    /// <summary>
+    /// 创建 LegacyBeatmapEncoder。
+    /// </summary>
+    /// <param name="useLazerVersion">是否使用 lazer 版本格式。</param>
+    public LegacyBeatmapEncoder(bool useLazerVersion)
+    {
+        UseLazerVersion = useLazerVersion;
     }
 
     /// <summary>
@@ -28,7 +42,8 @@ public class LegacyBeatmapEncoder
         var sb = new StringBuilder();
 
         // Version
-        sb.AppendLine($"osu file format v{beatmap.Version}");
+        int version = UseLazerVersion ? 128 : beatmap.Version;
+        sb.AppendLine($"osu file format v{version}");
 
         // General
         sb.AppendLine();

@@ -2,11 +2,102 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json.Serialization;
+using LAsOsuBeatmapParser.Analysis;
 using LAsOsuBeatmapParser.Beatmaps.ControlPoints;
 using LAsOsuBeatmapParser.Converters;
 using LAsOsuBeatmapParser.FakeFrameWork;
 
 namespace LAsOsuBeatmapParser.Beatmaps;
+
+/// <summary>
+/// 预计算的谱面分析数据，避免重复的数据提取和计算
+/// </summary>
+public class BeatmapAnalysisData
+{
+    /// <summary>
+    /// 总note数量
+    /// </summary>
+    public int TotalNotes { get; set; }
+
+    /// <summary>
+    /// LN数量
+    /// </summary>
+    public int LongNotes { get; set; }
+
+    /// <summary>
+    /// 谱面总时长（毫秒）
+    /// </summary>
+    public double TotalDuration { get; set; }
+
+    /// <summary>
+    /// 平均KPS
+    /// </summary>
+    public double AverageKPS { get; set; }
+
+    /// <summary>
+    /// 最大KPS
+    /// </summary>
+    public double MaxKPS { get; set; }
+
+    /// <summary>
+    /// 预计算的SR值（如果已计算）
+    /// </summary>
+    private double? starRating;
+    private bool starRatingComputed;
+    private Beatmap? parentBeatmap; // 引用父谱面用于延迟计算
+
+    public double? StarRating
+    {
+        get
+        {
+            // 如果已预计算且应该计算SR但SR还未计算，进行延迟计算
+            if (IsPrecomputed && ShouldCalculateSR && !starRatingComputed && parentBeatmap != null)
+            {
+                starRating = SRCalculator.Instance.CalculateSR(parentBeatmap, out _);
+                starRatingComputed = true;
+            }
+            return starRating;
+        }
+        set
+        {
+            starRating = value;
+            starRatingComputed = value.HasValue;
+        }
+    }
+
+    /// <summary>
+    /// 预计算的SRsNote数组（用于SR计算优化）
+    /// </summary>
+    public List<SRsNote>? SRsNotesList { get; set; }
+
+    /// <summary>
+    /// SR计算使用的SRsNote数组
+    /// </summary>
+    public SRsNote[]? SRsNotes { get; set; }
+
+    /// <summary>
+    /// 键数分布（每列的note数量）
+    /// </summary>
+    public int[]? KeyDistribution { get; set; }
+
+    /// <summary>
+    /// 设置父谱面引用，用于延迟计算SR
+    /// </summary>
+    public void SetParentBeatmap(IBeatmap parent)
+    {
+        parentBeatmap = parent as Beatmap;
+    }
+
+    /// <summary>
+    /// 是否已完成预计算
+    /// </summary>
+    public bool IsPrecomputed { get; set; }
+
+    /// <summary>
+    /// 是否应该计算SR值（用于延迟计算控制）
+    /// </summary>
+    public bool ShouldCalculateSR { get; set; }
+}
 
 /// <summary>
 /// 表示一个完整的osu!谱面。
@@ -83,6 +174,27 @@ public class Beatmap<T> : IBeatmap<T>
     /// </summary>
     [JsonConverter(typeof(HitObjectListConverter))]
     public List<T> HitObjects { get; set; } = new();
+
+    /// <summary>
+    /// 预计算的分析数据，避免重复计算
+    /// </summary>
+    [JsonIgnore]
+    public BeatmapAnalysisData AnalysisData
+    {
+        get => analysisData;
+        set
+        {
+            analysisData = value;
+            analysisData.SetParentBeatmap(this);
+        }
+    }
+    private BeatmapAnalysisData analysisData = new();
+
+    /// <summary>
+    /// 是否启用了分析数据预计算
+    /// </summary>
+    [JsonIgnore]
+    public bool IsAnalysisDataPrecomputationEnabled { get; set; }
 
     /// <summary>
     /// 事件（背景、视频、故事板等）。
