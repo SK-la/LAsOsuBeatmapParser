@@ -4,87 +4,77 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using LAsOsuBeatmapParser.Beatmaps;
 
-namespace LAsOsuBeatmapParser.Converters;
-
-/// <summary>
-/// 用于处理 List&lt;HitObject&gt; 多态的 JSON 转换器。
-/// </summary>
-public class HitObjectListConverter : JsonConverter<List<HitObject>>
+namespace LAsOsuBeatmapParser.Converters
 {
     /// <summary>
-    ///
+    /// 用于处理 List&lt;HitObject&gt; 多态的 JSON 转换器。
     /// </summary>
-    /// <param name="reader"></param>
-    /// <param name="typeToConvert"></param>
-    /// <param name="options"></param>
-    /// <returns></returns>
-    /// <exception cref="JsonException"></exception>
-    public override List<HitObject> Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    public class HitObjectListConverter : JsonConverter<List<HitObject>>
     {
-        var list = new List<HitObject>();
-
-        if (reader.TokenType != JsonTokenType.StartArray)
-            throw new JsonException();
-
-        while (reader.Read())
+        /// <summary>
+        ///
+        /// </summary>
+        /// <param name="reader"></param>
+        /// <param name="typeToConvert"></param>
+        /// <param name="options"></param>
+        /// <returns></returns>
+        /// <exception cref="JsonException"></exception>
+        public override List<HitObject> Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
         {
-            if (reader.TokenType == JsonTokenType.EndArray)
-                break;
+            var list = new List<HitObject>();
 
-            if (reader.TokenType == JsonTokenType.StartObject)
+            if (reader.TokenType != JsonTokenType.StartArray)
+                throw new JsonException();
+
+            while (reader.Read())
             {
-                // 读取对象以判断类型
-                using var doc = JsonDocument.ParseValue(ref reader);
-                var root = doc.RootElement;
+                if (reader.TokenType == JsonTokenType.EndArray)
+                    break;
 
-                if (root.TryGetProperty("Type", out var typeProp))
+                if (reader.TokenType == JsonTokenType.StartObject)
                 {
-                    var typeInt = typeProp.GetInt32();
-                    var type = (HitObjectType)typeInt;
+                    // 读取对象以判断类型
+                    using JsonDocument doc = JsonDocument.ParseValue(ref reader);
+                    JsonElement root = doc.RootElement;
 
-                    HitObject? hitObject;
+                    if (root.TryGetProperty("Type", out JsonElement typeProp))
+                    {
+                        int typeInt = typeProp.GetInt32();
+                        var type = (HitObjectType)typeInt;
 
-                    if (type.HasFlag(HitObjectType.ManiaHold))
-                    {
-                        hitObject = JsonSerializer.Deserialize<ManiaHoldNote>(root.GetRawText(), options);
-                    }
-                    else if (type.HasFlag(HitObjectType.Spinner))
-                    {
-                        hitObject = JsonSerializer.Deserialize<Spinner>(root.GetRawText(), options);
-                    }
-                    else if (type.HasFlag(HitObjectType.Slider))
-                    {
-                        hitObject = JsonSerializer.Deserialize<Slider>(root.GetRawText(), options);
-                    }
-                    else
-                    {
-                        hitObject = JsonSerializer.Deserialize<Note>(root.GetRawText(), options);
-                    }
+                        HitObject? hitObject;
 
-                    if (hitObject != null)
-                        list.Add(hitObject);
+                        if (type.HasFlag(HitObjectType.ManiaHold))
+                            hitObject = JsonSerializer.Deserialize<ManiaHoldNote>(root.GetRawText(), options);
+                        else if (type.HasFlag(HitObjectType.Spinner))
+                            hitObject = JsonSerializer.Deserialize<Spinner>(root.GetRawText(), options);
+                        else if (type.HasFlag(HitObjectType.Slider))
+                            hitObject = JsonSerializer.Deserialize<Slider>(root.GetRawText(), options);
+                        else
+                            hitObject = JsonSerializer.Deserialize<Note>(root.GetRawText(), options);
+
+                        if (hitObject != null)
+                            list.Add(hitObject);
+                    }
                 }
             }
+
+            return list;
         }
 
-        return list;
-    }
-
-    /// <summary>
-    ///
-    /// </summary>
-    /// <param name="writer"></param>
-    /// <param name="value"></param>
-    /// <param name="options"></param>
-    public override void Write(Utf8JsonWriter writer, List<HitObject> value, JsonSerializerOptions options)
-    {
-        writer.WriteStartArray();
-
-        foreach (var hitObject in value)
+        /// <summary>
+        ///
+        /// </summary>
+        /// <param name="writer"></param>
+        /// <param name="value"></param>
+        /// <param name="options"></param>
+        public override void Write(Utf8JsonWriter writer, List<HitObject> value, JsonSerializerOptions options)
         {
-            JsonSerializer.Serialize(writer, hitObject, hitObject.GetType(), options);
-        }
+            writer.WriteStartArray();
 
-        writer.WriteEndArray();
+            foreach (HitObject hitObject in value) JsonSerializer.Serialize(writer, hitObject, hitObject.GetType(), options);
+
+            writer.WriteEndArray();
+        }
     }
 }

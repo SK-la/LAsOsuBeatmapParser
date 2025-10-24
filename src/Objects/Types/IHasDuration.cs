@@ -1,19 +1,20 @@
 // Copyright (c) SK_la. Licensed under the MIT Licence.
 
-namespace LAsOsuBeatmapParser.Objects.Types;
-
-/// <summary>
-/// A HitObject that ends at a different time than its start time.
-/// </summary>
-public interface IHasDuration
+namespace LAsOsuBeatmapParser.Objects.Types
 {
     /// <summary>
-    /// The time at which the HitObject ends.
+    /// A HitObject that ends at a different time than its start time.
     /// </summary>
-    double EndTime { get; }
+    public interface IHasDuration
+    {
+        /// <summary>
+        /// The time at which the HitObject ends.
+        /// </summary>
+        double EndTime { get; }
 
-    /// <summary>
-    /// The duration of the HitObject.
-    /// </summary>
-    double Duration { get; set; }
+        /// <summary>
+        /// The duration of the HitObject.
+        /// </summary>
+        double Duration { get; set; }
+    }
 }

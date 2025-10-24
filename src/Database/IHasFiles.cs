@@ -1,53 +1,54 @@
 using System.Collections.Generic;
 
-namespace LAsOsuBeatmapParser.Database;
-
-/// <summary>
-/// Interface for objects that have files.
-/// </summary>
-public interface IHasFiles
+namespace LAsOsuBeatmapParser.Database
 {
     /// <summary>
-    /// The files associated with this object.
+    /// Interface for objects that have files.
     /// </summary>
-    IEnumerable<INamedFileUsage> Files { get; }
+    public interface IHasFiles
+    {
+        /// <summary>
+        /// The files associated with this object.
+        /// </summary>
+        IEnumerable<INamedFileUsage> Files { get; }
+
+        /// <summary>
+        /// Creates a file usage for the given filename.
+        /// </summary>
+        /// <param name="filename">The filename.</param>
+        /// <returns>The file usage.</returns>
+        INamedFileUsage CreateFileUsage(string filename);
+    }
 
     /// <summary>
-    /// Creates a file usage for the given filename.
+    /// Represents a named file usage.
     /// </summary>
-    /// <param name="filename">The filename.</param>
-    /// <returns>The file usage.</returns>
-    INamedFileUsage CreateFileUsage(string filename);
-}
+    public interface INamedFileUsage
+    {
+        /// <summary>
+        /// The filename.
+        /// </summary>
+        string Filename { get; }
 
-/// <summary>
-/// Represents a named file usage.
-/// </summary>
-public interface INamedFileUsage
-{
-    /// <summary>
-    /// The filename.
-    /// </summary>
-    string Filename { get; }
+        /// <summary>
+        /// The file info.
+        /// </summary>
+        IFileInfo File { get; }
+    }
 
     /// <summary>
-    /// The file info.
+    /// Represents file information.
     /// </summary>
-    IFileInfo File { get; }
-}
+    public interface IFileInfo
+    {
+        /// <summary>
+        /// The hash of the file.
+        /// </summary>
+        string Hash { get; }
 
-/// <summary>
-/// Represents file information.
-/// </summary>
-public interface IFileInfo
-{
-    /// <summary>
-    /// The hash of the file.
-    /// </summary>
-    string Hash { get; }
-
-    /// <summary>
-    /// The size of the file.
-    /// </summary>
-    long Size { get; }
+        /// <summary>
+        /// The size of the file.
+        /// </summary>
+        long Size { get; }
+    }
 }

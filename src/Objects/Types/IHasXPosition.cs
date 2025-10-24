@@ -1,14 +1,15 @@
 // Copyright (c) SK_la. Licensed under the MIT Licence.
 
-namespace LAsOsuBeatmapParser.Objects.Types;
-
-/// <summary>
-/// A HitObject that has a starting X-position.
-/// </summary>
-public interface IHasXPosition
+namespace LAsOsuBeatmapParser.Objects.Types
 {
     /// <summary>
-    /// The starting X-position of this HitObject.
+    /// A HitObject that has a starting X-position.
     /// </summary>
-    float X { get; set; }
+    public interface IHasXPosition
+    {
+        /// <summary>
+        /// The starting X-position of this HitObject.
+        /// </summary>
+        float X { get; set; }
+    }
 }

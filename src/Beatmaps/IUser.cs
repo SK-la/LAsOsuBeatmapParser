@@ -1,12 +1,13 @@
-namespace LAsOsuBeatmapParser.Beatmaps;
-
-/// <summary>
-/// Represents a user.
-/// </summary>
-public interface IUser
+namespace LAsOsuBeatmapParser.Beatmaps
 {
     /// <summary>
-    /// The username of the user.
+    /// Represents a user.
     /// </summary>
-    string Username { get; }
+    public interface IUser
+    {
+        /// <summary>
+        /// The username of the user.
+        /// </summary>
+        string Username { get; }
+    }
 }

@@ -26,17 +26,3 @@ Global
 		{87654321-4321-4321-4321-CBA987654321}.Release|Any CPU.Deploy.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal
-	Global
-		{12345678-1234-1234-1234-123456789ABC}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{12345678-1234-1234-1234-123456789ABC}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{12345678-1234-1234-1234-123456789ABC}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{12345678-1234-1234-1234-123456789ABC}.Release|Any CPU.Build.0 = Release|Any CPU
-		{87654321-4321-4321-4321-CBA987654321}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{87654321-4321-4321-4321-CBA987654321}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{87654321-4321-4321-4321-CBA987654321}.Debug|Any CPU.Test.0 = Debug|Any CPU
-		{87654321-4321-4321-4321-CBA987654321}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{87654321-4321-4321-4321-CBA987654321}.Release|Any CPU.Build.0 = Release|Any CPU
-		{87654321-4321-4321-4321-CBA987654321}.Release|Any CPU.Test.0 = Release|Any CPU
-	EndGlobal
-Global
-EndGlobal

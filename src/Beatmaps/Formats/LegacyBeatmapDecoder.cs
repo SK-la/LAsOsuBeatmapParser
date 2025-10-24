@@ -40,15 +40,14 @@ namespace LAsOsuBeatmapParser.Beatmaps.Formats
         /// 同步从文件路径解析谱面。
         /// </summary>
         /// <param name="filePath">.osu 文件路径。</param>
-        /// <param name="precomputeAnalysisData">是否预计算分析数据。默认为类的设置。</param>
         /// <returns>解析得到的谱面对象。</returns>
         /// <exception cref="BeatmapParseException">解析失败时抛出。</exception>
-        public Beatmap Decode(string filePath, bool? precomputeAnalysisData = null)
+        public Beatmap Decode(string filePath)
         {
             try
             {
                 using FileStream stream = File.OpenRead(filePath);
-                return Decode(stream, precomputeAnalysisData);
+                return Decode(stream);
             }
             catch (Exception ex)
             {
@@ -60,15 +59,14 @@ namespace LAsOsuBeatmapParser.Beatmaps.Formats
         /// 异步从文件路径解析谱面。
         /// </summary>
         /// <param name="filePath">.osu 文件路径。</param>
-        /// <param name="precomputeAnalysisData">是否预计算分析数据。默认为类的设置。</param>
         /// <returns>解析得到的谱面对象。</returns>
         /// <exception cref="BeatmapParseException">解析失败时抛出。</exception>
-        public async Task<Beatmap> DecodeAsync(string filePath, bool? precomputeAnalysisData = null)
+        public async Task<Beatmap> DecodeAsync(string filePath)
         {
             try
             {
                 await using FileStream stream = File.OpenRead(filePath);
-                return await DecodeAsync(stream, precomputeAnalysisData);
+                return await DecodeAsync(stream);
             }
             catch (Exception ex)
             {
@@ -80,41 +78,33 @@ namespace LAsOsuBeatmapParser.Beatmaps.Formats
         /// 从流中同步解析谱面。
         /// </summary>
         /// <param name="stream">包含 .osu 数据的流。</param>
-        /// <param name="precomputeAnalysisData">是否预计算分析数据。默认为类的设置。</param>
         /// <returns>解析得到的谱面对象。</returns>
         /// <exception cref="BeatmapParseException">解析失败时抛出。</exception>
-        public Beatmap Decode(Stream stream, bool? precomputeAnalysisData = null)
+        public Beatmap Decode(Stream stream)
         {
             using var reader = new StreamReader(stream);
-            return ParseBeatmap(reader, precomputeAnalysisData ?? EnableAnalysisDataPrecomputation);
+            return ParseBeatmap(reader);
         }
 
         /// <summary>
         /// 从流中异步解析谱面。
         /// </summary>
         /// <param name="stream">包含 .osu 数据的流。</param>
-        /// <param name="precomputeAnalysisData">是否预计算分析数据。默认为类的设置。</param>
         /// <returns>解析得到的谱面对象。</returns>
         /// <exception cref="BeatmapParseException">解析失败时抛出。</exception>
-        public async Task<Beatmap> DecodeAsync(Stream stream, bool? precomputeAnalysisData = null)
+        public async Task<Beatmap> DecodeAsync(Stream stream)
         {
             using var reader = new StreamReader(stream);
-            return await Task.Run(() => ParseBeatmap(reader, precomputeAnalysisData ?? EnableAnalysisDataPrecomputation));
+            return await Task.Run(() => ParseBeatmap(reader));
         }
 
-        private Beatmap ParseBeatmap(StreamReader reader, bool precomputeAnalysisData = true)
+        private Beatmap ParseBeatmap(StreamReader reader)
         {
             var beatmap = new Beatmap();
             string currentSection = "";
 
-            // 设置预计算标志（向后兼容，但现在不自动预计算）
-            beatmap.IsAnalysisDataPrecomputationEnabled = precomputeAnalysisData;
-
-            // 如果启用预计算，使用扩展方法计算分析数据
-            if (precomputeAnalysisData)
-            {
-                beatmap.CalculateAnalysisData(calculateSR: true);
-            }
+            // 设置预计算标志为 false，因为现在使用扩展方法获取分析数据
+            beatmap.IsAnalysisDataPrecomputationEnabled = false;
 
             while (reader.ReadLine() is { } line)
             {
@@ -490,6 +480,7 @@ namespace LAsOsuBeatmapParser.Beatmaps.Formats
             {
                 // parts[5] is the curve string like "B|100:200|150:250"
                 string[] curveParts = parts[5].Split('|');
+
                 if (curveParts.Length > 0)
                 {
                     // First part is curve type, skip it for curve points
@@ -582,10 +573,7 @@ namespace LAsOsuBeatmapParser.Beatmaps.Formats
                 maniaHit.StartTime = startTime;
 
             // 解析 x, y 位置
-            if (float.TryParse(parts[0], out float x) && float.TryParse(parts[1], out float y))
-            {
-                maniaHit.Position = (x, y);
-            }
+            if (float.TryParse(parts[0], out float x) && float.TryParse(parts[1], out float y)) maniaHit.Position = (x, y);
 
             // 根据 x 位置和键数计算列索引（用于兼容性）
             if (float.TryParse(parts[0], out float xPos))
@@ -700,7 +688,7 @@ namespace LAsOsuBeatmapParser.Beatmaps.Formats
 
                 break;
                 case "TimelineZoom":
-                    if (int.TryParse(value, out int timelineZoom))
+                    if (double.TryParse(value, out double timelineZoom))
                     {
                         beatmap.TimelineZoom = timelineZoom;
                         beatmap.TimelineZoomSet = true;

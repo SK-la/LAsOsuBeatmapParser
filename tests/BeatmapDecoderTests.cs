@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using Xunit;
 using System.IO;
@@ -426,38 +427,35 @@ ApproachRate:5
     public void PerformanceTest_PrecomputationOptimization()
     {
         // Arrange
-        string testFile = Path.Combine("Resource", "Jumpstream - Happy Hardcore Synthesizer (SK_la) [10k-1].osu");
+        string resourcePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "Resource");
+        string testFile = Path.Combine(resourcePath, "Jumpstream - Happy Hardcore Synthesizer (SK_la) [10k-1].osu");
         var decoder = new LegacyBeatmapDecoder();
 
-        // Act - Test with precomputation disabled
+        // Act - Test with precomputation disabled (now always disabled)
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
-        var beatmapNoPrecompute = decoder.Decode(testFile, false);
+        var beatmapNoPrecompute = decoder.Decode(testFile);
         stopwatch.Stop();
         var timeNoPrecompute = stopwatch.ElapsedMilliseconds;
 
-        // Assert - Verify no SR data is created when disabled
+        // Assert - Verify no SR data is created since precomputation is disabled
         Assert.Null(beatmapNoPrecompute.AnalysisData.SRsNotes);
         Assert.Null(beatmapNoPrecompute.AnalysisData.KeyDistribution);
 
-        // Act - Test with precomputation enabled
+        // Act - Test parsing again (precomputation is always disabled now)
         stopwatch.Restart();
-        var beatmapWithPrecompute = decoder.Decode(testFile, true);
+        var beatmapWithPrecompute = decoder.Decode(testFile);
         stopwatch.Stop();
         var timeWithPrecompute = stopwatch.ElapsedMilliseconds;
 
-        // Assert - Verify SR data is created when enabled
-        Assert.NotNull(beatmapWithPrecompute.AnalysisData.SRsNotes);
-        Assert.NotNull(beatmapWithPrecompute.AnalysisData.KeyDistribution);
-        Assert.Equal(beatmapWithPrecompute.HitObjects.Count, beatmapWithPrecompute.AnalysisData.SRsNotes.Length);
+        // Assert - Verify SR data is not created since precomputation is disabled
+        Assert.Null(beatmapWithPrecompute.AnalysisData.SRsNotes);
+        Assert.Null(beatmapWithPrecompute.AnalysisData.KeyDistribution);
 
         // Log performance results
-        _testOutputHelper.WriteLine($"Parse time without precompute: {timeNoPrecompute}ms");
-        _testOutputHelper.WriteLine($"Parse time with precompute: {timeWithPrecompute}ms");
-        _testOutputHelper.WriteLine($"SR notes created: {beatmapWithPrecompute.AnalysisData.SRsNotes.Length}");
+        _testOutputHelper.WriteLine($"Parse time: {timeNoPrecompute}ms");
+        _testOutputHelper.WriteLine($"Parse time again: {timeWithPrecompute}ms");
 
-        // The optimization should show some performance benefit (allowing some variance)
-        // Note: This is a basic check - real performance testing would need more sophisticated benchmarking
-        Assert.True(timeWithPrecompute >= timeNoPrecompute || timeWithPrecompute <= timeNoPrecompute * 1.5,
-            "Precomputation should not significantly degrade performance");
+        // The times should be similar since precomputation is disabled
+        Assert.True(Math.Abs(timeNoPrecompute - timeWithPrecompute) < 100, "Parse times should be similar");
     }
 }

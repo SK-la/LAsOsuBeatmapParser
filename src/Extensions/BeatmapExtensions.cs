@@ -201,13 +201,8 @@ namespace LAsOsuBeatmapParser.Extensions
                 analysisData.MaxKPS = maxKps;
             }
 
-            // SR相关预计算（只在需要计算SR时进行）
-            Console.WriteLine($"检查calculateSR条件: {calculateSR}");
-
             if (calculateSR)
             {
-                Console.WriteLine("进入SR计算分支");
-                Console.WriteLine($"SR计算分支执行，hitObjects.Count: {hitObjects.Count}");
                 // 从HitObjects创建SRsNotes
                 analysisData.SRsNotes = new SRsNote[hitObjects.Count];
 

@@ -30,4 +30,8 @@
     <Folder Include="Resource\" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Remove="Resource\Wisp X - Hibiscus (SK_la).osu" />
+  </ItemGroup>
+
 </Project>
