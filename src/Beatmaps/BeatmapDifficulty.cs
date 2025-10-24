@@ -1,3 +1,5 @@
+using System;
+
 namespace LAsOsuBeatmapParser.Beatmaps;
 
 /// <summary>
@@ -65,7 +67,12 @@ public class BeatmapDifficulty : IBeatmapDifficultyInfo
     public bool Equals(IBeatmapDifficultyInfo? other)
     {
         if (other == null) return false;
-        return HPDrainRate == other.DrainRate && CircleSize == other.CircleSize && OverallDifficulty == other.OverallDifficulty &&
-               ApproachRate == other.ApproachRate && SliderMultiplier == other.SliderMultiplier && SliderTickRate == other.SliderTickRate;
+        float TOLERANCE = 0;
+        return Math.Abs(HPDrainRate - other.DrainRate) < TOLERANCE &&
+               Math.Abs(CircleSize - other.CircleSize) < TOLERANCE &&
+               Math.Abs(OverallDifficulty - other.OverallDifficulty) < TOLERANCE &&
+               Math.Abs(ApproachRate - other.ApproachRate) < TOLERANCE &&
+               Math.Abs(SliderMultiplier - other.SliderMultiplier) < TOLERANCE &&
+               Math.Abs(SliderTickRate - other.SliderTickRate) < TOLERANCE;
     }
 }

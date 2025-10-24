@@ -68,7 +68,7 @@ public class BeatmapInfo : IBeatmapInfo, IHasRealmPrimaryKey, IHasOnlineID
     /// <summary>
     /// The SHA-256 hash representing this beatmap's contents.
     /// </summary>
-    public string Hash { get; set; } = string.Empty;
+    public string Hash { get; } = string.Empty;
 
     /// <summary>
     /// MD5 is kept for legacy support (matching against replays etc.).

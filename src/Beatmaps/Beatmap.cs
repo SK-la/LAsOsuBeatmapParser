@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text.Json.Serialization;
 using LAsOsuBeatmapParser.Beatmaps.ControlPoints;
 using LAsOsuBeatmapParser.Converters;
-using LAsOsuBeatmapParser.Framework.Lists;
+using LAsOsuBeatmapParser.FakeFrameWork;
 
 namespace LAsOsuBeatmapParser.Beatmaps;
 

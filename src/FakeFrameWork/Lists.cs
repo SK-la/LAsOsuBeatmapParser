@@ -2,7 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 
-namespace LAsOsuBeatmapParser.Framework.Lists;
+namespace LAsOsuBeatmapParser.FakeFrameWork;
 
 /// <summary>
 /// A list that maintains its elements in sorted order.

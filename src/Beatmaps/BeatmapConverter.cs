@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 using LAsOsuBeatmapParser.Beatmaps.ControlPoints;
-using LAsOsuBeatmapParser.Framework.Lists;
+using LAsOsuBeatmapParser.FakeFrameWork;
 
 namespace LAsOsuBeatmapParser.Beatmaps;
 
