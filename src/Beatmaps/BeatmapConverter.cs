@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using LAsOsuBeatmapParser.Beatmaps.ControlPoints;
+using LAsOsuBeatmapParser.Framework.Lists;
 
 namespace LAsOsuBeatmapParser.Beatmaps;
 
@@ -62,6 +64,7 @@ public abstract class BeatmapConverter<T> : IBeatmapConverter
             EditorTimestamp = original.BeatmapInfo.EditorTimestamp
         };
         original.ControlPointInfo = new ControlPointInfo(); // Deep clone would be needed
+        original.Breaks = new SortedList<BreakPeriod>();
 
         // Apply conversion
         return ConvertBeatmap(original, cancellationToken);

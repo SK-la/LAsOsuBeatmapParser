@@ -51,7 +51,7 @@ public abstract class HitObject
 /// <summary>
 /// 表示一个HitCircle。
 /// </summary>
-public class Note : HitObject
+public partial class Note : HitObject
 {
     /// <summary>
     ///

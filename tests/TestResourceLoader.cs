@@ -3,7 +3,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using LAsOsuBeatmapParser.Beatmaps;
-using LAsOsuBeatmapParser.Decode;
+using LAsOsuBeatmapParser.Beatmaps.Formats;
 
 namespace LAsOsuBeatmapParser.Tests
 {
@@ -76,7 +76,7 @@ namespace LAsOsuBeatmapParser.Tests
             try
             {
                 using var stream = File.OpenRead(osuPath);
-                var decoder = new BeatmapDecoder();
+                var decoder = new LegacyBeatmapDecoder();
                 var beatmap = decoder.Decode(stream);
                 Console.WriteLine($"\n解析结果: {Path.GetFileName(osuPath)}");
                 Console.WriteLine($"Mode: {beatmap.Mode}");

@@ -1,18 +1,19 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Threading.Tasks;
 using LAsOsuBeatmapParser.Beatmaps;
 
-namespace LAsOsuBeatmapParser.Beatmaps
+namespace LAsOsuBeatmapParser.Analysis
 {
-    partial class Note
+    public class Note
     {
         public int K { get; set; }
-        public int H { get; set; }
-        public int T { get; set; }
+        public double H { get; set; }
+        public double T { get; set; }
 
-        public Note(int k, int h, int t)
+        public Note(int k, double h, double t)
         {
             K = k;
             H = h;
@@ -83,7 +84,7 @@ namespace LAsOsuBeatmapParser.Beatmaps
 
         // 极致性能优化：异步SR计算核心，已并行化所有section
         // out times用于记录各部分计算时间
-        public double CalculateSR(Beatmap beatmap, out Dictionary<string, long> times)
+        public double CalculateSR<T>(IBeatmap<T> beatmap, out Dictionary<string, long> times) where T : HitObject
         {
             var task = CalculateSRAsync(beatmap);
             var (sr, t) = task.Result; // 同步等待（用于兼容旧接口）
@@ -93,10 +94,10 @@ namespace LAsOsuBeatmapParser.Beatmaps
 
         // 极致性能优化：异步SR计算核心，已并行化所有section
         // 返回 (sr, times) 元组
-        public async Task<(double sr, Dictionary<string, long> times)> CalculateSRAsync(Beatmap beatmap)
+        public async Task<(double sr, Dictionary<string, long> times)> CalculateSRAsync<T>(IBeatmap<T> beatmap) where T : HitObject
         {
-            double od = beatmap.Difficulty.OverallDifficulty;
-            int K = (int)beatmap.Difficulty.CircleSize;
+            double od = beatmap.BeatmapInfo.Difficulty.OverallDifficulty;
+            int K = (int)beatmap.BeatmapInfo.Difficulty.CircleSize;
             var times = new Dictionary<string, long>();
 
             // Check if key count is supported (max 18 keys, even numbers only for K>10)
@@ -157,7 +158,7 @@ namespace LAsOsuBeatmapParser.Beatmaps
                 }
 
                 // Calculate T
-                var T = Math.Max(noteSeq.Max(n => n.H), noteSeq.Max(n => n.T)) + 1;
+                var totalTime = (int)(Math.Max(noteSeq.Max(n => n.H), noteSeq.Max(n => n.T)) + 1);
 
                 var stopwatch = new Stopwatch();
 
@@ -168,50 +169,26 @@ namespace LAsOsuBeatmapParser.Beatmaps
                 // 优化：使用并行任务加速Section 23/24/25的计算
                 var task23 = Task.Run(() =>
                 {
-                    try
-                    {
-                        var sectionStopwatch = Stopwatch.StartNew();
-                        var (jBar, deltaKsResult) = CalculateSection23(K, noteSeqByColumn, T, x);
-                        sectionStopwatch.Stop();
-                        return (jBar, deltaKsResult);
-                    }
-                    catch (Exception ex)
-                    {
-                        Logger.WriteLine(LogLevel.Error, $"[SRCalculator] Section23 Exception: {ex.Message}");
-                        throw;
-                    }
+                    var sectionStopwatch = Stopwatch.StartNew();
+                    var (jBar, deltaKsResult) = CalculateSection23(K, noteSeqByColumn, totalTime, x);
+                    sectionStopwatch.Stop();
+                    return (jBar, deltaKsResult);
                 });
 
                 var task24 = Task.Run(() =>
                 {
-                    try
-                    {
-                        var sectionStopwatch = Stopwatch.StartNew();
-                        var XBar = CalculateSection24(K, T, noteSeqByColumn, x);
-                        sectionStopwatch.Stop();
-                        return XBar;
-                    }
-                    catch (Exception ex)
-                    {
-                        Logger.WriteLine(LogLevel.Error, $"[SRCalculator] Section24 Exception: {ex.Message}");
-                        throw;
-                    }
+                    var sectionStopwatch = Stopwatch.StartNew();
+                    var XBar = CalculateSection24(K, totalTime, noteSeqByColumn, x);
+                    sectionStopwatch.Stop();
+                    return XBar;
                 });
 
                 var task25 = Task.Run(() =>
                 {
-                    try
-                    {
-                        var sectionStopwatch = Stopwatch.StartNew();
-                        var PBar = CalculateSection25(T, LNSeq, noteSeq, x);
-                        sectionStopwatch.Stop();
-                        return PBar;
-                    }
-                    catch (Exception ex)
-                    {
-                        Logger.WriteLine(LogLevel.Error, $"[SRCalculator] Section25 Exception: {ex.Message}");
-                        throw;
-                    }
+                    var sectionStopwatch = Stopwatch.StartNew();
+                    var PBar = CalculateSection25(totalTime, LNSeq, noteSeq, x);
+                    sectionStopwatch.Stop();
+                    return PBar;
                 });
 
                 // Wait for all tasks to complete
@@ -227,30 +204,8 @@ namespace LAsOsuBeatmapParser.Beatmaps
                 times["Section232425"] = stopwatch.ElapsedMilliseconds;
 
                 stopwatch.Restart();
-                var task26 = Task.Run(() =>
-                {
-                    try
-                    {
-                        return CalculateSection26(deltaKs, K, T, noteSeq);
-                    }
-                    catch (Exception ex)
-                    {
-                        Logger.WriteLine(LogLevel.Error, $"[SRCalculator] Section26 Exception: {ex.Message}");
-                        throw;
-                    }
-                });
-                var task27 = Task.Run(() =>
-                {
-                    try
-                    {
-                        return CalculateSection27(LNSeq, tailSeq, T, noteSeqByColumn, x);
-                    }
-                    catch (Exception ex)
-                    {
-                        Logger.WriteLine(LogLevel.Error, $"[SRCalculator] Section27 Exception: {ex.Message}");
-                        throw;
-                    }
-                });
+                var task26 = Task.Run(() => CalculateSection26(deltaKs, K, totalTime, noteSeq));
+                var task27 = Task.Run(() => CalculateSection27(LNSeq, tailSeq, totalTime, noteSeqByColumn, x));
 
                 // Wait for both tasks to complete
                 await Task.WhenAll(task26, task27).ConfigureAwait(false);
@@ -265,7 +220,7 @@ namespace LAsOsuBeatmapParser.Beatmaps
 
                 // Final calculation
                 stopwatch.Restart();
-                var result = CalculateSection3(JBar, XBar, PBar, ABar, RBar, KS, T, noteSeq, LNSeq, K);
+                var result = CalculateSection3(JBar, XBar, PBar, ABar, RBar, KS, totalTime, noteSeq, LNSeq, K);
                 stopwatch.Stop();
                 // Logger.WriteLine(LogLevel.Debug, $"[SRCalculator]Section 3 Time: {stopwatch.ElapsedMilliseconds}ms");
                 times["Section3"] = stopwatch.ElapsedMilliseconds;
@@ -276,10 +231,8 @@ namespace LAsOsuBeatmapParser.Beatmaps
 
                 return (result, times);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Logger.WriteLine(LogLevel.Error, $"[SRCalculator] Exception: {ex.Message}");
-                Logger.WriteLine(LogLevel.Error, $"[SRCalculator] StackTrace: {ex.StackTrace}");
                 times["Error"] = -1;
                 return (-1, times);
             }
@@ -372,8 +325,8 @@ namespace LAsOsuBeatmapParser.Beatmaps
                             var val = (1 / (delta * (delta + lambda1X))) * jack;
 
                             // Define start and end for filling the range in deltaKs and JKs
-                            var start = localNoteSeqByColumn[k][i].H;
-                            var end = localNoteSeqByColumn[k][i + 1].H;
+                            var start = (int)localNoteSeqByColumn[k][i].H;
+                            var end = (int)localNoteSeqByColumn[k][i + 1].H;
                             var length = end - start;
 
                             // Use Span to fill subarrays
@@ -409,8 +362,8 @@ namespace LAsOsuBeatmapParser.Beatmaps
                             var val = (1 / (delta * (delta + lambda1X))) * jack;
 
                             // Define start and end for filling the range in deltaKs and JKs
-                            var start = noteSeqByColumn[k][i].H;
-                            var end = noteSeqByColumn[k][i + 1].H;
+                            var start = (int)noteSeqByColumn[k][i].H;
+                            var end = (int)noteSeqByColumn[k][i + 1].H;
                             var length = end - start;
 
                             // Use Span to fill subarrays
@@ -483,8 +436,8 @@ namespace LAsOsuBeatmapParser.Beatmaps
                     var maxXd = Math.Max(x, delta);
                     var val = 0.16 / (maxXd * maxXd);
 
-                    var start = notesInPair[i - 1].H;
-                    var end = notesInPair[i].H;
+                    var start = (int)notesInPair[i - 1].H;
+                    var end = (int)notesInPair[i].H;
                     var length = end - start;
                     XKsSpan.Slice(start, length).Fill(val);
                 }
@@ -515,9 +468,9 @@ namespace LAsOsuBeatmapParser.Beatmaps
                 var offset = threadId * T;
                 var note = LNSeq[i];
                 var t1 = Math.Min(note.H + 80, note.T);
-                for (var t = note.H; t < t1; t++)
+                for (var t = (int)note.H; t < (int)t1; t++)
                     partialLNBodies[offset + t] += 0.5;
-                for (var t = t1; t < note.T; t++)
+                for (var t = (int)t1; t < (int)note.T; t++)
                     partialLNBodies[offset + t] += 1;
             });
 
@@ -553,12 +506,12 @@ namespace LAsOsuBeatmapParser.Beatmaps
                 var delta = 0.001 * (noteSeq[i + 1].H - noteSeq[i].H);
                 if (delta < 1e-9)
                 {
-                    P[noteSeq[i].H] += 1000 * Math.Sqrt(Math.Sqrt(0.02 * (4 / x - lambda_3)));
+                    P[(int)noteSeq[i].H] += 1000 * Math.Sqrt(Math.Sqrt(0.02 * (4 / x - lambda_3)));
                 }
                 else
                 {
-                    var h_l = noteSeq[i].H;
-                    var h_r = noteSeq[i + 1].H;
+                    var h_l = (int)noteSeq[i].H;
+                    var h_r = (int)noteSeq[i + 1].H;
                     var v = 1 + lambda2Scaled * (prefixSumLNBodies[h_r] - prefixSumLNBodies[h_l]);
 
                     if (delta < 2 * x / 3)
@@ -593,8 +546,8 @@ namespace LAsOsuBeatmapParser.Beatmaps
             // 并行化：每个note独立填充KUKs，优化性能
             Parallel.ForEach(noteSeq, note =>
             {
-                var startTime = Math.Max(0, note.H - 500);
-                var endTime = note.T < 0 ? Math.Min(note.H + 500, T - 1) : Math.Min(note.T + 500, T - 1);
+                var startTime = Math.Max(0, (int)note.H - 500);
+                var endTime = note.T < 0 ? Math.Min((int)note.H + 500, T - 1) : Math.Min((int)note.T + 500, T - 1);
 
                 for (var s = startTime; s < endTime; s++) KUKs[note.K][s] = true;
             });
@@ -654,10 +607,10 @@ namespace LAsOsuBeatmapParser.Beatmaps
             var I = new double[LNSeq.Length];
             Parallel.For(0, tailSeq.Length, i =>
             {
-                var (k, h_i, t_i) = (tailSeq[i].K, tailSeq[i].H, tailSeq[i].T);
+                var (k, h_i, t_i) = (tailSeq[i].K, (int)tailSeq[i].H, (int)tailSeq[i].T);
                 var columnNotes = k < noteSeqByColumn.Length ? noteSeqByColumn[k] : [];
                 var nextNote = FindNextNoteInColumn(tailSeq[i], columnNotes);
-                var (_, h_j, _) = (nextNote.K, nextNote.H, nextNote.T);
+                var (_, h_j, _) = (nextNote.K, (int)nextNote.H, nextNote.T);
 
                 var I_h = 0.001 * Math.Abs(t_i - h_i - 80) / x;
                 var I_t = 0.001 * Math.Abs(h_j - t_i - 80) / x;
@@ -672,7 +625,7 @@ namespace LAsOsuBeatmapParser.Beatmaps
                 var delta_r = 0.001 * (tailSeq[i + 1].T - tailSeq[i].T);
                 var isVal = 1 + I[i];
                 var rVal = 0.08 * Math.Pow(delta_r, -1.0 / 2) * Math.Pow(x, -1) * (1 + lambda_4 * (I[i] + I[i + 1]));
-                for (var s = tailSeq[i].T; s < tailSeq[i + 1].T; s++)
+                for (var s = (int)tailSeq[i].T; s < (int)tailSeq[i + 1].T; s++)
                 {
                     Is[s] = isVal;
                     R[s] = rVal;
@@ -748,10 +701,10 @@ namespace LAsOsuBeatmapParser.Beatmaps
             return SR;
         }
 
-        public List<Note> getNotes(Beatmap beatmap)
+        public List<Note> getNotes<T>(IBeatmap<T> beatmap) where T : HitObject
         {
             var notes = new List<Note>();
-            double cs = beatmap.Difficulty.CircleSize;
+            double cs = beatmap.BeatmapInfo.Difficulty.CircleSize;
             foreach (var hitObject in beatmap.HitObjects)
             {
                 var col = (int)Math.Floor(hitObject.Position.X * cs / 512.0);

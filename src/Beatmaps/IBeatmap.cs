@@ -1,5 +1,7 @@
 using System.Collections.Generic;
 using LAsOsuBeatmapParser.Beatmaps;
+using LAsOsuBeatmapParser.Beatmaps.ControlPoints;
+using LAsOsuBeatmapParser.Framework.Lists;
 
 namespace LAsOsuBeatmapParser.Beatmaps;
 
@@ -32,13 +34,23 @@ public interface IBeatmap
     /// <summary>
     /// The breaks in this beatmap.
     /// </summary>
-    SortedSet<BreakPeriod> Breaks { get; set; }
+    SortedList<BreakPeriod> Breaks { get; set; }
 
     /// <summary>
     /// Creates a deep clone of this beatmap.
     /// </summary>
     /// <returns>The cloned beatmap.</returns>
     IBeatmap Clone();
+
+    /// <summary>
+    /// Returns statistics for the <see cref="HitObjects"/> contained in this beatmap.
+    /// </summary>
+    IEnumerable<BeatmapStatistic> GetStatistics();
+
+    /// <summary>
+    /// Finds the most common beat length represented by the control points in this beatmap.
+    /// </summary>
+    double GetMostCommonBeatLength();
 }
 
 /// <summary>

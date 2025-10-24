@@ -4,17 +4,17 @@ using System.Linq;
 using System.Text;
 using LAsOsuBeatmapParser.Beatmaps;
 
-namespace LAsOsuBeatmapParser.Encode;
+namespace LAsOsuBeatmapParser.Beatmaps.Formats;
 
 /// <summary>
 /// osu! .osu 文件编码器。
 /// </summary>
-public class BeatmapEncoder
+public class LegacyBeatmapEncoder
 {
     /// <summary>
-    /// 创建 BeatmapEncoder。
+    /// 创建 LegacyBeatmapEncoder。
     /// </summary>
-    public BeatmapEncoder()
+    public LegacyBeatmapEncoder()
     {
     }
 

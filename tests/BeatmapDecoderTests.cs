@@ -3,8 +3,7 @@ using Xunit;
 using System.IO;
 using System.Text;
 using LAsOsuBeatmapParser.Beatmaps;
-using LAsOsuBeatmapParser.Decode;
-using LAsOsuBeatmapParser.Encode;
+using LAsOsuBeatmapParser.Beatmaps.Formats;
 using LAsOsuBeatmapParser.Exceptions;
 using Xunit.Abstractions;
 
@@ -51,7 +50,7 @@ ApproachRate:5
 ";
 
         using var stream = new MemoryStream(Encoding.UTF8.GetBytes(osuContent));
-        var decoder = new BeatmapDecoder();
+        var decoder = new LegacyBeatmapDecoder();
 
         // Act
         var beatmap = decoder.Decode(stream);
@@ -92,8 +91,8 @@ ApproachRate:5
     {
         // Arrange - Decode original file
         using var originalStream = File.OpenRead(osuFilePath);
-        var decoder = new BeatmapDecoder();
-        var encoder = new BeatmapEncoder();
+        var decoder = new LegacyBeatmapDecoder();
+        var encoder = new LegacyBeatmapEncoder();
         var originalBeatmap = decoder.Decode(originalStream);
 
         // Act - Encode then decode again
@@ -182,8 +181,8 @@ ApproachRate:5
 
         // Act - Decode and re-encode
         using var originalStream = File.OpenRead(testFilePath);
-        var decoder = new BeatmapDecoder();
-        var encoder = new BeatmapEncoder();
+        var decoder = new LegacyBeatmapDecoder();
+        var encoder = new LegacyBeatmapEncoder();
         var beatmap = decoder.Decode(originalStream);
 
         _testOutputHelper.WriteLine("=== PARSED BEATMAP PROPERTIES ===");
@@ -259,8 +258,8 @@ ApproachRate:5
 
         // Act - Decode and re-encode
         using var originalStream = File.OpenRead(testFilePath);
-        var decoder = new BeatmapDecoder();
-        var encoder = new BeatmapEncoder();
+        var decoder = new LegacyBeatmapDecoder();
+        var encoder = new LegacyBeatmapEncoder();
         var beatmap = decoder.Decode(originalStream);
         var encodedContent = encoder.EncodeToString(beatmap);
 

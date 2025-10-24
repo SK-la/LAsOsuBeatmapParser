@@ -6,17 +6,17 @@ using System.Threading.Tasks;
 using LAsOsuBeatmapParser.Beatmaps;
 using LAsOsuBeatmapParser.Exceptions;
 
-namespace LAsOsuBeatmapParser.Decode;
+namespace LAsOsuBeatmapParser.Beatmaps.Formats;
 
 /// <summary>
 /// osu! .osu 文件解析器。
 /// </summary>
-public class BeatmapDecoder
+public class LegacyBeatmapDecoder
 {
     /// <summary>
-    /// 创建 BeatmapDecoder。
+    /// 创建 LegacyBeatmapDecoder。
     /// </summary>
-    public BeatmapDecoder()
+    public LegacyBeatmapDecoder()
     {
     }
 
@@ -522,8 +522,8 @@ public class BeatmapDecoder
             // 对于 Mania，x 位置决定音符所在列
             // 使用官方的坐标转换公式：column = floor(x / (512 / keyCount))
             int keyCount = (int)beatmap.Difficulty.CircleSize;
-            float columnWidth = 512f / keyCount;
-            hold.Column = (int)(x / columnWidth);
+            float ratio = 512f / keyCount;
+            hold.Column = (int)(x / ratio);
             hold.KeyCount = keyCount;
         }
 
@@ -551,8 +551,8 @@ public class BeatmapDecoder
             {
                 // Standard format: calculate column from x position
                 // 使用官方的坐标转换公式：column = floor(x / (512 / keyCount))
-                float columnWidth = 512f / keyCount;
-                maniaHit.Column = (int)(x / columnWidth);
+                float ratio = 512f / keyCount;
+                maniaHit.Column = (int)(x / ratio);
             }
 
             maniaHit.KeyCount = keyCount;

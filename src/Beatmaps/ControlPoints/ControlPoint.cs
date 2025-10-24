@@ -1,4 +1,4 @@
-namespace LAsOsuBeatmapParser.Beatmaps;
+namespace LAsOsuBeatmapParser.Beatmaps.ControlPoints;
 
 /// <summary>
 /// A control point.

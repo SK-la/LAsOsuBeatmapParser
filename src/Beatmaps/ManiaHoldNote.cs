@@ -1,3 +1,5 @@
+using System;
+
 namespace LAsOsuBeatmapParser.Beatmaps;
 
 /// <summary>
@@ -50,11 +52,11 @@ public class ManiaHoldNote : HitObject
     public override string ToString()
     {
         // Mania hold notes: x,y,time,type,hitSound,endTime:hitSample
-        // Use official osu formula: x = (column + 0.5) * (512 / keyCount)
+        // Use official osu formula: x = ceil(column * (512 / keyCount))
         const int totalWidth = 512;
         int keyCount = KeyCount > 0 ? KeyCount : 4; // Default to 4 if not set
-        float columnWidth = totalWidth / (float)keyCount;
-        int x = (int)((Column + 0.5f) * columnWidth);
+        float ratio = totalWidth / (float)keyCount;
+        int x = (int)Math.Ceiling(Column * ratio);
         int y = 192; // Standard y position
         int type = 128; // Hold note type
         int hitSound = 0;

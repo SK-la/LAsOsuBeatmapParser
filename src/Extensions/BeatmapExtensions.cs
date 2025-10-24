@@ -1,8 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using LAsOsuBeatmapParser.Exceptions;
 using LAsOsuBeatmapParser.Beatmaps;
+using LAsOsuBeatmapParser.Beatmaps.ControlPoints;
+using LAsOsuBeatmapParser.Exceptions;
 
 namespace LAsOsuBeatmapParser.Extensions;
 

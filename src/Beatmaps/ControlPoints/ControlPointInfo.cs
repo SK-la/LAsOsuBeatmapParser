@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace LAsOsuBeatmapParser.Beatmaps;
+namespace LAsOsuBeatmapParser.Beatmaps.ControlPoints;
 
 /// <summary>
 /// Contains all the control points in a beatmap.

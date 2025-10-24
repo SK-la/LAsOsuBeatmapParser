@@ -1,6 +1,10 @@
+using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text.Json.Serialization;
+using LAsOsuBeatmapParser.Beatmaps.ControlPoints;
 using LAsOsuBeatmapParser.Converters;
+using LAsOsuBeatmapParser.Framework.Lists;
 
 namespace LAsOsuBeatmapParser.Beatmaps;
 
@@ -54,7 +58,7 @@ public class Beatmap<T> : IBeatmap<T>
     /// <summary>
     /// The breaks in this beatmap.
     /// </summary>
-    public SortedSet<BreakPeriod> Breaks { get; set; } = new SortedSet<BreakPeriod>();
+    public SortedList<BreakPeriod> Breaks { get; set; } = new SortedList<BreakPeriod>();
 
     /// <summary>
     /// 谱面元数据。
@@ -115,6 +119,40 @@ public class Beatmap<T> : IBeatmap<T>
     /// Letterbox in breaks was explicitly set.
     /// </summary>
     public bool LetterboxInBreaksSet { get; set; }
+
+    /// <summary>
+    /// Total amount of break time in the beatmap.
+    /// </summary>
+    public double TotalBreakTime => Breaks.Sum(b => b.Duration);
+
+    /// <summary>
+    /// Finds the most common beat length represented by the control points in this beatmap.
+    /// </summary>
+    public double GetMostCommonBeatLength()
+    {
+        if (!ControlPointInfo.TimingPoints.Any())
+            return 1000; // Default
+
+        var groups = ControlPointInfo.TimingPoints
+            .GroupBy(t => Math.Round(t.BeatLength * 1000) / 1000)
+            .Select(g => new { BeatLength = g.Key, Count = g.Count() })
+            .OrderByDescending(g => g.Count)
+            .First();
+
+        return groups.BeatLength;
+    }
+
+    /// <summary>
+    /// Returns statistics for the <see cref="HitObjects"/> contained in this beatmap.
+    /// </summary>
+    public virtual IEnumerable<BeatmapStatistic> GetStatistics() => new[]
+    {
+        new BeatmapStatistic
+        {
+            Name = "Hit Objects",
+            Content = HitObjects.Count.ToString()
+        }
+    };
 
     /// <summary>
     /// Widescreen storyboard.

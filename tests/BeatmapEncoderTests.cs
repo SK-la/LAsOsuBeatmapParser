@@ -5,7 +5,7 @@ using Xunit.Abstractions;
 using System.IO;
 using System.Text;
 using LAsOsuBeatmapParser.Beatmaps;
-using LAsOsuBeatmapParser.Encode;
+using LAsOsuBeatmapParser.Beatmaps.Formats;
 
 namespace LAsOsuBeatmapParser.Tests;
 
@@ -63,7 +63,7 @@ public class BeatmapEncoderTests
             }
         };
 
-        var encoder = new BeatmapEncoder();
+        var encoder = new LegacyBeatmapEncoder();
 
         // Act
         var result = encoder.EncodeToString(beatmap);
@@ -128,8 +128,8 @@ public class BeatmapEncoderTests
             }
         };
 
-        var encoder = new BeatmapEncoder();
-        var decoder = new Decode.BeatmapDecoder();
+        var encoder = new LegacyBeatmapEncoder();
+        var decoder = new LegacyBeatmapDecoder();
 
         // Act - Encode then decode
         var encodedContent = encoder.EncodeToString(originalBeatmap);
@@ -152,13 +152,13 @@ public class BeatmapEncoderTests
         // Test coordinate conversion for different key counts
         var testCases = new[]
         {
-            (keyCount: 4, column: 0, expectedX: 64),   // 4k: (0 + 0.5) * (512/4) = 0.5 * 128 = 64
-            (keyCount: 4, column: 1, expectedX: 192),  // 4k: (1 + 0.5) * (512/4) = 1.5 * 128 = 192
-            (keyCount: 4, column: 2, expectedX: 320),  // 4k: (2 + 0.5) * (512/4) = 2.5 * 128 = 320
-            (keyCount: 4, column: 3, expectedX: 448),  // 4k: (3 + 0.5) * (512/4) = 3.5 * 128 = 448
-            (keyCount: 7, column: 0, expectedX: 37),   // 7k: (0 + 0.5) * (512/7) ≈ 0.5 * 73.14 ≈ 37
-            (keyCount: 7, column: 3, expectedX: 256),  // 7k: (3 + 0.5) * (512/7) ≈ 3.5 * 73.14 ≈ 256
-            (keyCount: 7, column: 6, expectedX: 475),  // 7k: (6 + 0.5) * (512/7) ≈ 6.5 * 73.14 ≈ 475
+            (keyCount: 4, column: 0, expectedX: 0),   // 4k: ceil(0 * (512/4)) = 0
+            (keyCount: 4, column: 1, expectedX: 128),  // 4k: ceil(1 * 128) = 128
+            (keyCount: 4, column: 2, expectedX: 256),  // 4k: ceil(2 * 128) = 256
+            (keyCount: 4, column: 3, expectedX: 384),  // 4k: ceil(3 * 128) = 384
+            (keyCount: 7, column: 0, expectedX: 0),   // 7k: ceil(0 * (512/7)) ≈ 0
+            (keyCount: 7, column: 3, expectedX: 220),  // 7k: ceil(3 * 73.142857) ≈ 220
+            (keyCount: 7, column: 6, expectedX: 439),  // 7k: ceil(6 * 73.142857) ≈ 439
         };
 
         foreach (var (keyCount, column, expectedX) in testCases)
@@ -174,7 +174,7 @@ public class BeatmapEncoderTests
         }
 
         // Test decoding (x to column)
-        var decoder = new Decode.BeatmapDecoder();
+        var decoder = new LegacyBeatmapDecoder();
         foreach (var (keyCount, column, expectedX) in testCases)
         {
             var beatmap = new Beatmap
@@ -216,7 +216,7 @@ public class BeatmapEncoderTests
             HitObjects = new List<HitObject> { new ManiaHitObject(1000, 0) }
         };
 
-        var encoder = new BeatmapEncoder();
+        var encoder = new LegacyBeatmapEncoder();
         var tempFile = Path.GetTempFileName() + ".osu";
 
         try
@@ -251,8 +251,8 @@ public class BeatmapEncoderTests
         Assert.NotNull(testDir); // Ensure we found the Resource directory
 
         var testFilePath = Path.Combine(testDir, "Resource", "Jumpstream - Happy Hardcore Synthesizer (SK_la) [5k-1].osu");
-        var decoder = new Decode.BeatmapDecoder();
-        var encoder = new BeatmapEncoder();
+        var decoder = new LegacyBeatmapDecoder();
+        var encoder = new LegacyBeatmapEncoder();
 
         // Load and parse the real osu file
         using var stream = File.OpenRead(testFilePath);
