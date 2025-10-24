@@ -204,9 +204,9 @@ public class LegacyBeatmapDecoder
                 }
                 break;
             case "Mode":
-                if (int.TryParse(value, out var modeInt) && Enum.IsDefined(typeof(GameMode), modeInt))
+                if (int.TryParse(value, out var modeInt))
                 {
-                    beatmap.Mode = (GameMode)modeInt;
+                    beatmap.Mode = GameMode.FromId(modeInt) ?? (IGameMode)new CustomGameMode(modeInt, $"Mode_{modeInt}");
                 }
                 break;
             case "LetterboxInBreaks":
@@ -413,7 +413,7 @@ public class LegacyBeatmapDecoder
         {
             var type = (HitObjectType)typeInt;
 
-            if (type.HasFlag(HitObjectType.ManiaHold) && beatmap.Mode == GameMode.Mania)
+            if (type.HasFlag(HitObjectType.ManiaHold) && beatmap.Mode.Id == GameMode.Mania.Id)
             {
                 hitObject = ParseManiaHold(beatmap, parts);
             }
@@ -425,7 +425,7 @@ public class LegacyBeatmapDecoder
             {
                 hitObject = ParseSlider(parts);
             }
-            else if (beatmap.Mode == GameMode.Mania)
+            else if (beatmap.Mode.Id == GameMode.Mania.Id)
             {
                 hitObject = ParseManiaHitObject(beatmap, parts);
             }

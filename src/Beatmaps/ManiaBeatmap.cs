@@ -27,7 +27,7 @@ public class ManiaBeatmap : Beatmap<ManiaHitObject>
     /// <exception cref="InvalidModeException">如果模式不是Mania则抛出异常。</exception>
     public void ValidateMode()
     {
-        if (Mode != GameMode.Mania)
+        if (Mode.Id != GameMode.Mania.Id)
         {
             throw new InvalidModeException("Beatmap mode must be Mania for ManiaBeatmap.");
         }

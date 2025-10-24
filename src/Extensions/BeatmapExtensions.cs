@@ -28,7 +28,7 @@ public static class BeatmapExtensions
             return maniaBeatmap;
         }
 
-        if (beatmap.Mode != GameMode.Mania)
+        if (beatmap.Mode.Id != GameMode.Mania.Id)
         {
             throw new InvalidModeException("Beatmap mode must be Mania.");
         }

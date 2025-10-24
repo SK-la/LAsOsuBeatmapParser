@@ -19,10 +19,14 @@ public static class BeatmapValidator
     {
         var errors = new List<string>();
 
-        // 验证模式
-        if (!Enum.IsDefined(typeof(GameMode), beatmap.Mode))
+        // 验证模式 - 现在允许自定义模式，所以只检查基本有效性
+        if (beatmap.Mode == null)
         {
-            errors.Add($"无效的游戏模式: {beatmap.Mode}");
+            errors.Add("游戏模式不能为空");
+        }
+        else if (beatmap.Mode.Id < 0)
+        {
+            errors.Add($"游戏模式ID无效: {beatmap.Mode.Id}");
         }
 
         // 验证TimingPoint是否按时间排序
@@ -50,7 +54,7 @@ public static class BeatmapValidator
         }
 
         // Mania模式专属验证
-        if (beatmap.Mode == GameMode.Mania)
+        if (beatmap.Mode.Id == GameMode.Mania.Id)
         {
             var maniaBeatmap = beatmap.GetManiaBeatmap();
 

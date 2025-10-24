@@ -93,7 +93,7 @@ public class Beatmap<T> : IBeatmap<T>
     /// 游戏模式（Standard、Taiko、Catch、Mania）。
     /// </summary>
     [JsonIgnore]
-    public GameMode Mode { get; set; }
+    public IGameMode Mode { get; set; } = GameMode.Standard;
 
     /// <summary>
     /// 谱面版本。

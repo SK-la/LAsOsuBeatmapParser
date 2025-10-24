@@ -42,7 +42,7 @@ public class LegacyBeatmapEncoder
             sb.AppendLine($"SampleSet: {beatmap.SampleSet}");
         if (beatmap.StackLeniencySet)
             sb.AppendLine($"StackLeniency: {beatmap.StackLeniency}");
-        sb.AppendLine($"Mode: {(int)beatmap.Mode}");
+        sb.AppendLine($"Mode: {beatmap.Mode.Id}");
         if (beatmap.LetterboxInBreaksSet)
             sb.AppendLine($"LetterboxInBreaks: {(beatmap.LetterboxInBreaks ? 1 : 0)}");
         if (beatmap.StoryFireInFrontSet)

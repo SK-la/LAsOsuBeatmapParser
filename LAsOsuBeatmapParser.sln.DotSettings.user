@@ -1,10 +1,11 @@
 ﻿<wpf:ResourceDictionary xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:s="clr-namespace:System;assembly=mscorlib" xmlns:ss="urn:shemas-jetbrains-com:settings-storage-xaml" xmlns:wpf="http://schemas.microsoft.com/winfx/2006/xaml/presentation">
-	<s:String x:Key="/Default/CodeInspection/Highlighting/SweaWarningsMode/@EntryValue">ShowAndRun</s:String>
+	<s:String x:Key="/Default/CodeInspection/Highlighting/SweaWarningsMode/@EntryValue">DoNotShowAndRun</s:String>
 	<s:String x:Key="/Default/Environment/UnitTesting/UnitTestSessionStore/Sessions/=be4fa42f_002D84e7_002D4b98_002D8c2a_002D56b58c9d5b85/@EntryIndexedValue">&lt;SessionState ContinuousTestingMode="0" IsActive="True" Name="GetManiaBeatmap_ValidManiaBeatmap_ReturnsManiaBeatmap" xmlns="urn:schemas-jetbrains-com:jetbrains-ut-session"&gt;&#xD;
   &lt;TestAncestor&gt;&#xD;
     &lt;TestId&gt;xUnit::87654321-4321-4321-4321-CBA987654321::net8.0::LAsOsuBeatmapParser.Tests.BeatmapDecoderTests.GetManiaBeatmap_ValidManiaBeatmap_ReturnsManiaBeatmap&lt;/TestId&gt;&#xD;
     &lt;TestId&gt;xUnit::87654321-4321-4321-4321-CBA987654321::net8.0::LAsOsuBeatmapParser.Tests.BeatmapDecoderTests.Decode_ValidOsuFile_ReturnsBeatmap&lt;/TestId&gt;&#xD;
     &lt;TestId&gt;xUnit::87654321-4321-4321-4321-CBA987654321::net8.0::LAsOsuBeatmapParser.Tests.BeatmapDecoderTests.Decode_RealOsuFile_PropertiesNotNull&lt;/TestId&gt;&#xD;
     &lt;TestId&gt;xUnit::87654321-4321-4321-4321-CBA987654321::net8.0::LAsOsuBeatmapParser.Tests.BeatmapEncoderTests&lt;/TestId&gt;&#xD;
+    &lt;TestId&gt;xUnit::87654321-4321-4321-4321-CBA987654321::net8.0::LAsOsuBeatmapParser.Tests.SRCalculatorTests.RunDetailedPerformanceAnalysis&lt;/TestId&gt;&#xD;
   &lt;/TestAncestor&gt;&#xD;
 &lt;/SessionState&gt;</s:String></wpf:ResourceDictionary>
