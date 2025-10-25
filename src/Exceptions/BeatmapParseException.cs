@@ -3,17 +3,12 @@ using System;
 namespace LAsOsuBeatmapParser.Exceptions
 {
     /// <summary>
-    /// 谱面解析失败时抛出的异常。
+    ///     谱面解析失败时抛出的异常。
     /// </summary>
     public class BeatmapParseException : Exception
     {
         /// <summary>
-        /// 出错的行号。
-        /// </summary>
-        public int? LineNumber { get; }
-
-        /// <summary>
-        /// 创建 BeatmapParseException。
+        ///     创建 BeatmapParseException。
         /// </summary>
         /// <param name="message">错误信息。</param>
         public BeatmapParseException(string message)
@@ -22,7 +17,7 @@ namespace LAsOsuBeatmapParser.Exceptions
         }
 
         /// <summary>
-        /// 创建 BeatmapParseException。
+        ///     创建 BeatmapParseException。
         /// </summary>
         /// <param name="message">错误信息。</param>
         /// <param name="lineNumber">出错的行号。</param>
@@ -33,7 +28,7 @@ namespace LAsOsuBeatmapParser.Exceptions
         }
 
         /// <summary>
-        /// 创建 BeatmapParseException。
+        ///     创建 BeatmapParseException。
         /// </summary>
         /// <param name="message">错误信息。</param>
         /// <param name="innerException">内部异常。</param>
@@ -43,7 +38,7 @@ namespace LAsOsuBeatmapParser.Exceptions
         }
 
         /// <summary>
-        /// 创建 BeatmapParseException。
+        ///     创建 BeatmapParseException。
         /// </summary>
         /// <param name="message">错误信息。</param>
         /// <param name="lineNumber">出错的行号。</param>
@@ -53,5 +48,10 @@ namespace LAsOsuBeatmapParser.Exceptions
         {
             LineNumber = lineNumber;
         }
+
+        /// <summary>
+        ///     出错的行号。
+        /// </summary>
+        public int? LineNumber { get; }
     }
 }

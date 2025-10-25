@@ -1,27 +1,24 @@
 // Copyright (c) SK_la. Licensed under the MIT Licence.
 
-using LAsOsuBeatmapParser.Objects.Types;
-
 namespace LAsOsuBeatmapParser.Objects.Legacy
 {
     /// <summary>
-    /// A HitObjectParser to parse legacy Beatmaps.
+    ///     A HitObjectParser to parse legacy Beatmaps.
     /// </summary>
     public class ConvertHitObjectParser : HitObjectParser
     {
         /// <summary>
-        /// The offset to apply to all time values.
+        ///     The .osu format (beatmap) version.
+        /// </summary>
+        private readonly int formatVersion;
+        /// <summary>
+        ///     The offset to apply to all time values.
         /// </summary>
         private readonly double offset;
 
-        /// <summary>
-        /// The .osu format (beatmap) version.
-        /// </summary>
-        private readonly int formatVersion;
-
         internal ConvertHitObjectParser(double offset, int formatVersion)
         {
-            this.offset = offset;
+            this.offset        = offset;
             this.formatVersion = formatVersion;
         }
 
@@ -50,8 +47,8 @@ namespace LAsOsuBeatmapParser.Objects.Legacy
             var result = new ConvertHitObject
             {
                 StartTime = startTime,
-                X = x,
-                Y = y
+                X         = x,
+                Y         = y
             };
 
             // Parse samples if available

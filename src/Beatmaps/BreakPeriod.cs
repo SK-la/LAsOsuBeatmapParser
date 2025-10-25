@@ -3,22 +3,33 @@ using System;
 namespace LAsOsuBeatmapParser.Beatmaps
 {
     /// <summary>
-    /// Represents a break period in a beatmap.
+    ///     Represents a break period in a beatmap.
     /// </summary>
     public class BreakPeriod : IComparable<BreakPeriod>, IEquatable<BreakPeriod>
     {
         /// <summary>
-        /// The start time of the break.
+        ///     Constructs a new break period.
+        /// </summary>
+        /// <param name="startTime">The start time of the break period.</param>
+        /// <param name="endTime">The end time of the break period.</param>
+        public BreakPeriod(double startTime, double endTime)
+        {
+            StartTime = startTime;
+            EndTime   = endTime;
+        }
+
+        /// <summary>
+        ///     The start time of the break.
         /// </summary>
         public double StartTime { get; init; }
 
         /// <summary>
-        /// The end time of the break.
+        ///     The end time of the break.
         /// </summary>
         public double EndTime { get; init; }
 
         /// <summary>
-        /// The duration of the break.
+        ///     The duration of the break.
         /// </summary>
         public double Duration
         {
@@ -26,30 +37,20 @@ namespace LAsOsuBeatmapParser.Beatmaps
         }
 
         /// <summary>
-        /// Constructs a new break period.
-        /// </summary>
-        /// <param name="startTime">The start time of the break period.</param>
-        /// <param name="endTime">The end time of the break period.</param>
-        public BreakPeriod(double startTime, double endTime)
-        {
-            StartTime = startTime;
-            EndTime = endTime;
-        }
-
-        /// <summary>
-        /// Compares this break period to another.
+        ///     Compares this break period to another.
         /// </summary>
         /// <param name="other">The other break period.</param>
         /// <returns>The comparison result.</returns>
         public int CompareTo(BreakPeriod? other)
         {
             if (other == null) return 1;
+
             int result = StartTime.CompareTo(other.StartTime);
             return result != 0 ? result : EndTime.CompareTo(other.EndTime);
         }
 
         /// <summary>
-        /// Determines whether this break period is equal to another.
+        ///     Determines whether this break period is equal to another.
         /// </summary>
         /// <param name="other">The other break period.</param>
         /// <returns>True if equal, false otherwise.</returns>
@@ -63,7 +64,7 @@ namespace LAsOsuBeatmapParser.Beatmaps
         }
 
         /// <summary>
-        /// Returns the hash code for this break period.
+        ///     Returns the hash code for this break period.
         /// </summary>
         /// <returns>The hash code.</returns>
         public override int GetHashCode()
@@ -71,12 +72,12 @@ namespace LAsOsuBeatmapParser.Beatmaps
             const double epsilon = 1e-7;
             // Round to the nearest multiple of epsilon to ensure equal objects have equal hash codes
             long startRounded = (long)Math.Round(StartTime / epsilon);
-            long endRounded = (long)Math.Round(EndTime / epsilon);
+            long endRounded   = (long)Math.Round(EndTime / epsilon);
             return HashCode.Combine(startRounded, endRounded);
         }
 
         /// <summary>
-        /// Returns a string representation of this break period.
+        ///     Returns a string representation of this break period.
         /// </summary>
         /// <returns>The string representation.</returns>
         public override string ToString()

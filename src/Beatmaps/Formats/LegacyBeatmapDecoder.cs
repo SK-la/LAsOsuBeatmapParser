@@ -1,29 +1,27 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
+using System.Numerics;
 using System.Threading.Tasks;
-using LAsOsuBeatmapParser.Analysis;
-using LAsOsuBeatmapParser.Beatmaps;
 using LAsOsuBeatmapParser.Exceptions;
 using LAsOsuBeatmapParser.Extensions;
 
 namespace LAsOsuBeatmapParser.Beatmaps.Formats
 {
     /// <summary>
-    /// osu! .osu 文件解析器。
+    ///     osu! .osu 文件解析器。
     /// </summary>
     public class LegacyBeatmapDecoder
     {
         /// <summary>
-        /// 创建 LegacyBeatmapDecoder。
+        ///     创建 LegacyBeatmapDecoder。
         /// </summary>
         public LegacyBeatmapDecoder()
         {
         }
 
         /// <summary>
-        /// 同步从文件路径解析谱面。
+        ///     同步从文件路径解析谱面。
         /// </summary>
         /// <param name="filePath">.osu 文件路径。</param>
         /// <returns>解析得到的谱面对象。</returns>
@@ -42,7 +40,7 @@ namespace LAsOsuBeatmapParser.Beatmaps.Formats
         }
 
         /// <summary>
-        /// 异步从文件路径解析谱面。
+        ///     异步从文件路径解析谱面。
         /// </summary>
         /// <param name="filePath">.osu 文件路径。</param>
         /// <returns>解析得到的谱面对象。</returns>
@@ -61,7 +59,7 @@ namespace LAsOsuBeatmapParser.Beatmaps.Formats
         }
 
         /// <summary>
-        /// 从流中同步解析谱面。
+        ///     从流中同步解析谱面。
         /// </summary>
         /// <param name="stream">包含 .osu 数据的流。</param>
         /// <returns>解析得到的谱面对象。</returns>
@@ -73,7 +71,7 @@ namespace LAsOsuBeatmapParser.Beatmaps.Formats
         }
 
         /// <summary>
-        /// 从流中异步解析谱面。
+        ///     从流中异步解析谱面。
         /// </summary>
         /// <param name="stream">包含 .osu 数据的流。</param>
         /// <returns>解析得到的谱面对象。</returns>
@@ -86,7 +84,7 @@ namespace LAsOsuBeatmapParser.Beatmaps.Formats
 
         private Beatmap ParseBeatmap(StreamReader reader)
         {
-            var beatmap = new Beatmap();
+            var    beatmap        = new Beatmap();
             string currentSection = "";
 
             while (reader.ReadLine() is { } line)
@@ -117,7 +115,7 @@ namespace LAsOsuBeatmapParser.Beatmaps.Formats
             }
 
             // 解析后计算 BPM 和 Matrix
-            beatmap.BPM = beatmap.GetBPM();
+            beatmap.BPM    = beatmap.GetBPM();
             beatmap.Matrix = beatmap.BuildMatrix();
 
             return beatmap;
@@ -131,25 +129,31 @@ namespace LAsOsuBeatmapParser.Beatmaps.Formats
                 {
                     case "General":
                         ParseGeneral(beatmap, line);
-                    break;
+                        break;
+
                     case "Metadata":
                         ParseMetadata(beatmap, line);
-                    break;
+                        break;
+
                     case "Difficulty":
                         ParseDifficulty(beatmap, line);
-                    break;
+                        break;
+
                     case "TimingPoints":
                         ParseTimingPoint(beatmap, line);
-                    break;
+                        break;
+
                     case "HitObjects":
                         ParseHitObject(beatmap, line);
-                    break;
+                        break;
+
                     case "Events":
                         ParseEvent(beatmap, line);
-                    break;
+                        break;
+
                     case "Editor":
                         ParseEditor(beatmap, line);
-                    break;
+                        break;
                     // 根据需要添加其他部分
                 }
             }
@@ -164,121 +168,138 @@ namespace LAsOsuBeatmapParser.Beatmaps.Formats
             string[] parts = line.Split(':', 2);
             if (parts.Length != 2) return;
 
-            string key = parts[0].Trim();
+            string key   = parts[0].Trim();
             string value = parts[1].Trim();
 
             switch (key)
             {
                 case "AudioFilename":
                     beatmap.Metadata.AudioFile = value;
-                break;
+                    break;
+
                 case "AudioLeadIn":
                     if (int.TryParse(value, out int audioLeadIn))
                     {
-                        beatmap.AudioLeadIn = audioLeadIn;
+                        beatmap.AudioLeadIn    = audioLeadIn;
                         beatmap.AudioLeadInSet = true;
                     }
 
-                break;
+                    break;
+
                 case "PreviewTime":
                     if (int.TryParse(value, out int previewTime))
                         beatmap.Metadata.PreviewTime = previewTime;
-                break;
+                    break;
+
                 case "Countdown":
                     if (int.TryParse(value, out int countdownInt) && Enum.IsDefined(typeof(CountdownType), countdownInt))
                     {
-                        beatmap.Countdown = (CountdownType)countdownInt;
+                        beatmap.Countdown    = (CountdownType)countdownInt;
                         beatmap.CountdownSet = true;
                     }
 
-                break;
+                    break;
+
                 case "SampleSet":
-                    beatmap.SampleSet = value;
+                    beatmap.SampleSet    = value;
                     beatmap.SampleSetSet = true;
-                break;
+                    break;
+
                 case "StackLeniency":
                     if (double.TryParse(value, out double stackLeniency))
                     {
-                        beatmap.StackLeniency = stackLeniency;
+                        beatmap.StackLeniency    = stackLeniency;
                         beatmap.StackLeniencySet = true;
                     }
 
-                break;
+                    break;
+
                 case "Mode":
                     if (int.TryParse(value, out int modeInt)) beatmap.Mode = GameMode.FromId(modeInt) ?? (IGameMode)new CustomGameMode(modeInt, $"Mode_{modeInt}");
-                break;
+                    break;
+
                 case "LetterboxInBreaks":
                     if (int.TryParse(value, out int letterboxInt))
                         beatmap.LetterboxInBreaks = letterboxInt != 0;
                     else if (bool.TryParse(value, out bool letterboxInBreaks))
                         beatmap.LetterboxInBreaks = letterboxInBreaks;
                     beatmap.LetterboxInBreaksSet = true;
-                break;
+                    break;
+
                 case "StoryFireInFront":
                     if (int.TryParse(value, out int storyFireInt))
                         beatmap.StoryFireInFront = storyFireInt != 0;
                     else if (bool.TryParse(value, out bool storyFireInFront))
                         beatmap.StoryFireInFront = storyFireInFront;
                     beatmap.StoryFireInFrontSet = true;
-                break;
+                    break;
+
                 case "UseSkinSprites":
                     if (int.TryParse(value, out int useSkinInt))
                         beatmap.UseSkinSprites = useSkinInt != 0;
                     else if (bool.TryParse(value, out bool useSkinSprites))
                         beatmap.UseSkinSprites = useSkinSprites;
                     beatmap.UseSkinSpritesSet = true;
-                break;
+                    break;
+
                 case "AlwaysShowPlayfield":
                     if (int.TryParse(value, out int alwaysShowInt))
                         beatmap.AlwaysShowPlayfield = alwaysShowInt != 0;
                     else if (bool.TryParse(value, out bool alwaysShowPlayfield))
                         beatmap.AlwaysShowPlayfield = alwaysShowPlayfield;
                     beatmap.AlwaysShowPlayfieldSet = true;
-                break;
+                    break;
+
                 case "OverlayPosition":
-                    beatmap.OverlayPosition = value;
+                    beatmap.OverlayPosition    = value;
                     beatmap.OverlayPositionSet = true;
-                break;
+                    break;
+
                 case "SkinPreference":
-                    beatmap.SkinPreference = value;
+                    beatmap.SkinPreference    = value;
                     beatmap.SkinPreferenceSet = true;
-                break;
+                    break;
+
                 case "EpilepsyWarning":
                     if (int.TryParse(value, out int epilepsyInt))
                         beatmap.EpilepsyWarning = epilepsyInt != 0;
                     else if (bool.TryParse(value, out bool epilepsyWarning))
                         beatmap.EpilepsyWarning = epilepsyWarning;
                     beatmap.EpilepsyWarningSet = true;
-                break;
+                    break;
+
                 case "CountdownOffset":
                     if (int.TryParse(value, out int countdownOffset))
                     {
-                        beatmap.CountdownOffset = countdownOffset;
+                        beatmap.CountdownOffset    = countdownOffset;
                         beatmap.CountdownOffsetSet = true;
                     }
 
-                break;
+                    break;
+
                 case "SpecialStyle":
                     if (int.TryParse(value, out int specialInt))
                         beatmap.SpecialStyle = specialInt != 0;
                     else if (bool.TryParse(value, out bool specialStyle))
                         beatmap.SpecialStyle = specialStyle;
                     beatmap.SpecialStyleSet = true;
-                break;
+                    break;
+
                 case "WidescreenStoryboard":
                     if (int.TryParse(value, out int widescreenInt))
                         beatmap.WidescreenStoryboard = widescreenInt != 0;
                     else if (bool.TryParse(value, out bool widescreenStoryboard))
                         beatmap.WidescreenStoryboard = widescreenStoryboard;
                     beatmap.WidescreenStoryboardSet = true;
-                break;
+                    break;
+
                 case "SamplesMatchPlaybackRate":
                     if (int.TryParse(value, out int samplesInt))
                         beatmap.SamplesMatchPlaybackRate = samplesInt != 0;
                     else if (bool.TryParse(value, out bool samplesMatchPlaybackRate))
                         beatmap.SamplesMatchPlaybackRate = samplesMatchPlaybackRate;
                     beatmap.SamplesMatchPlaybackRateSet = true;
-                break;
+                    break;
             }
         }
 
@@ -287,45 +308,54 @@ namespace LAsOsuBeatmapParser.Beatmaps.Formats
             string[] parts = line.Split(':', 2);
             if (parts.Length != 2) return;
 
-            string key = parts[0].Trim();
+            string key   = parts[0].Trim();
             string value = parts[1].Trim();
 
             switch (key)
             {
                 case "Title":
                     beatmap.Metadata.Title = value;
-                break;
+                    break;
+
                 case "TitleUnicode":
                     beatmap.Metadata.TitleUnicode = value;
-                break;
+                    break;
+
                 case "Artist":
                     beatmap.Metadata.Artist = value;
-                break;
+                    break;
+
                 case "ArtistUnicode":
                     beatmap.Metadata.ArtistUnicode = value;
-                break;
+                    break;
+
                 case "Creator":
-                    beatmap.Metadata.Creator = value;
+                    beatmap.Metadata.Creator         = value;
                     beatmap.Metadata.Author.Username = value;
-                break;
+                    break;
+
                 case "Version":
-                    beatmap.Metadata.Version = value;
+                    beatmap.Metadata.Version           = value;
                     beatmap.BeatmapInfo.DifficultyName = value;
-                break;
+                    break;
+
                 case "BeatmapID":
                     if (int.TryParse(value, out int id))
                         beatmap.Metadata.BeatmapID = id;
-                break;
+                    break;
+
                 case "BeatmapSetID":
                     if (int.TryParse(value, out int setId))
                         beatmap.Metadata.BeatmapSetID = setId;
-                break;
+                    break;
+
                 case "Source":
                     beatmap.Metadata.Source = value;
-                break;
+                    break;
+
                 case "Tags":
                     beatmap.Metadata.Tags = value;
-                break;
+                    break;
                 // 添加其他元数据
             }
         }
@@ -335,7 +365,7 @@ namespace LAsOsuBeatmapParser.Beatmaps.Formats
             string[] parts = line.Split(':', 2);
             if (parts.Length != 2) return;
 
-            string key = parts[0].Trim();
+            string key   = parts[0].Trim();
             string value = parts[1].Trim();
 
             switch (key)
@@ -343,27 +373,32 @@ namespace LAsOsuBeatmapParser.Beatmaps.Formats
                 case "HPDrainRate":
                     if (float.TryParse(value, out float hp))
                         beatmap.Difficulty.HPDrainRate = hp;
-                break;
+                    break;
+
                 case "CircleSize":
                     if (float.TryParse(value, out float cs))
                         beatmap.Difficulty.CircleSize = cs;
-                break;
+                    break;
+
                 case "OverallDifficulty":
                     if (float.TryParse(value, out float od))
                         beatmap.Difficulty.OverallDifficulty = od;
-                break;
+                    break;
+
                 case "ApproachRate":
                     if (float.TryParse(value, out float ar))
                         beatmap.Difficulty.ApproachRate = ar;
-                break;
+                    break;
+
                 case "SliderMultiplier":
                     if (float.TryParse(value, out float sm))
                         beatmap.Difficulty.SliderMultiplier = sm;
-                break;
+                    break;
+
                 case "SliderTickRate":
                     if (float.TryParse(value, out float str))
                         beatmap.Difficulty.SliderTickRate = str;
-                break;
+                    break;
             }
         }
 
@@ -435,7 +470,7 @@ namespace LAsOsuBeatmapParser.Beatmaps.Formats
                 hitCircle.StartTime = startTime;
 
             if (float.TryParse(parts[0], out float x) && float.TryParse(parts[1], out float y))
-                hitCircle.Position = new System.Numerics.Vector2(x, y);
+                hitCircle.Position = new Vector2(x, y);
 
             if (parts.Length > 4 && int.TryParse(parts[4], out int hitsound))
                 hitCircle.Hitsound = hitsound;
@@ -457,7 +492,7 @@ namespace LAsOsuBeatmapParser.Beatmaps.Formats
                 slider.StartTime = startTime;
 
             if (float.TryParse(parts[0], out float x) && float.TryParse(parts[1], out float y))
-                slider.Position = new System.Numerics.Vector2(x, y);
+                slider.Position = new Vector2(x, y);
 
             if (parts.Length > 5)
             {
@@ -501,7 +536,7 @@ namespace LAsOsuBeatmapParser.Beatmaps.Formats
                 spinner.StartTime = startTime;
 
             if (float.TryParse(parts[0], out float x) && float.TryParse(parts[1], out float y))
-                spinner.Position = new System.Numerics.Vector2(x, y);
+                spinner.Position = new Vector2(x, y);
 
             if (parts.Length > 5 && double.TryParse(parts[5], out double endTime))
                 spinner.EndTime = endTime;
@@ -540,7 +575,7 @@ namespace LAsOsuBeatmapParser.Beatmaps.Formats
                 // 对于 Mania，x 位置决定音符所在列
                 // 使用新的坐标转换公式
                 int keyCount = (int)beatmap.Difficulty.CircleSize;
-                hold.Column = ManiaExtensions.GetColumnFromX(keyCount, xPos);
+                hold.Column   = ManiaExtensions.GetColumnFromX(keyCount, xPos);
                 hold.KeyCount = keyCount;
             }
 
@@ -562,7 +597,7 @@ namespace LAsOsuBeatmapParser.Beatmaps.Formats
             if (float.TryParse(parts[0], out float x) && float.TryParse(parts[1], out float y))
             {
                 // Set position, which will normalize and set column
-                maniaHit.Position = new System.Numerics.Vector2(x, 192f);
+                maniaHit.Position = new Vector2(x, 192f);
             }
 
             if (parts.Length > 4 && int.TryParse(parts[4], out int hitsound))
@@ -585,7 +620,7 @@ namespace LAsOsuBeatmapParser.Beatmaps.Formats
                 var commentEvent = new Event
                 {
                     IsComment = true,
-                    Params = line
+                    Params    = line
                 };
                 beatmap.Events.Add(commentEvent);
                 return;
@@ -596,9 +631,9 @@ namespace LAsOsuBeatmapParser.Beatmaps.Formats
 
             var eventObj = new Event
             {
-                Type = parts[0],
+                Type      = parts[0],
                 StartTime = double.TryParse(parts[1], out double time) ? time : 0,
-                Params = parts.Length > 2 ? string.Join(",", parts[2..]) : ""
+                Params    = parts.Length > 2 ? string.Join(",", parts[2..]) : ""
             };
 
             // Check if this is a background event (type 0)
@@ -609,7 +644,7 @@ namespace LAsOsuBeatmapParser.Beatmaps.Formats
 
                 if (paramParts.Length >= 1)
                 {
-                    string filename = paramParts[0].Trim('"'); // Remove quotes
+                    string filename                                                      = paramParts[0].Trim('"'); // Remove quotes
                     if (!string.IsNullOrEmpty(filename)) beatmap.Metadata.BackgroundFile = filename;
                 }
             }
@@ -622,7 +657,7 @@ namespace LAsOsuBeatmapParser.Beatmaps.Formats
             string[] parts = line.Split(':', 2);
             if (parts.Length != 2) return;
 
-            string key = parts[0].Trim();
+            string key   = parts[0].Trim();
             string value = parts[1].Trim();
 
             switch (key)
@@ -631,7 +666,7 @@ namespace LAsOsuBeatmapParser.Beatmaps.Formats
                     if (!string.IsNullOrEmpty(value))
                     {
                         string[] bookmarkStrings = value.Split(',');
-                        var bookmarks = new List<int>();
+                        var      bookmarks       = new List<int>();
 
                         foreach (string bookmarkStr in bookmarkStrings)
                         {
@@ -639,39 +674,43 @@ namespace LAsOsuBeatmapParser.Beatmaps.Formats
                                 bookmarks.Add(bookmark);
                         }
 
-                        beatmap.Bookmarks = bookmarks.ToArray();
+                        beatmap.Bookmarks    = bookmarks.ToArray();
                         beatmap.BookmarksSet = true;
                     }
 
-                break;
+                    break;
+
                 case "DistanceSpacing":
                     if (double.TryParse(value, out double distanceSpacing))
                     {
-                        beatmap.DistanceSpacing = distanceSpacing;
+                        beatmap.DistanceSpacing    = distanceSpacing;
                         beatmap.DistanceSpacingSet = true;
                     }
 
-                break;
+                    break;
+
                 case "BeatDivisor":
                     if (int.TryParse(value, out int beatDivisor))
                         beatmap.BeatmapInfo.BeatDivisor = beatDivisor;
-                break;
+                    break;
+
                 case "GridSize":
                     if (int.TryParse(value, out int gridSize))
                     {
-                        beatmap.GridSize = gridSize;
+                        beatmap.GridSize    = gridSize;
                         beatmap.GridSizeSet = true;
                     }
 
-                break;
+                    break;
+
                 case "TimelineZoom":
                     if (double.TryParse(value, out double timelineZoom))
                     {
-                        beatmap.TimelineZoom = timelineZoom;
+                        beatmap.TimelineZoom    = timelineZoom;
                         beatmap.TimelineZoomSet = true;
                     }
 
-                break;
+                    break;
             }
         }
     }

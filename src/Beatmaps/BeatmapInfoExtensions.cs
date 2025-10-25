@@ -1,12 +1,12 @@
 namespace LAsOsuBeatmapParser.Beatmaps
 {
     /// <summary>
-    /// Extension methods for <see cref="IBeatmapInfo"/>.
+    ///     Extension methods for <see cref="IBeatmapInfo" />.
     /// </summary>
     public static class BeatmapInfoExtensions
     {
         /// <summary>
-        /// Gets the star rating for this beatmap.
+        ///     Gets the star rating for this beatmap.
         /// </summary>
         /// <param name="beatmapInfo">The beatmap info.</param>
         /// <returns>The star rating.</returns>
@@ -16,7 +16,7 @@ namespace LAsOsuBeatmapParser.Beatmaps
         }
 
         /// <summary>
-        /// Gets the BPM for this beatmap.
+        ///     Gets the BPM for this beatmap.
         /// </summary>
         /// <param name="beatmapInfo">The beatmap info.</param>
         /// <returns>The BPM.</returns>
@@ -26,7 +26,7 @@ namespace LAsOsuBeatmapParser.Beatmaps
         }
 
         /// <summary>
-        /// Gets the length for this beatmap.
+        ///     Gets the length for this beatmap.
         /// </summary>
         /// <param name="beatmapInfo">The beatmap info.</param>
         /// <returns>The length in milliseconds.</returns>
@@ -36,7 +36,7 @@ namespace LAsOsuBeatmapParser.Beatmaps
         }
 
         /// <summary>
-        /// Gets the hash for this beatmap.
+        ///     Gets the hash for this beatmap.
         /// </summary>
         /// <param name="beatmapInfo">The beatmap info.</param>
         /// <returns>The hash.</returns>
@@ -46,7 +46,7 @@ namespace LAsOsuBeatmapParser.Beatmaps
         }
 
         /// <summary>
-        /// Gets the MD5 hash for this beatmap.
+        ///     Gets the MD5 hash for this beatmap.
         /// </summary>
         /// <param name="beatmapInfo">The beatmap info.</param>
         /// <returns>The MD5 hash.</returns>
@@ -56,7 +56,7 @@ namespace LAsOsuBeatmapParser.Beatmaps
         }
 
         /// <summary>
-        /// Gets the total object count for this beatmap.
+        ///     Gets the total object count for this beatmap.
         /// </summary>
         /// <param name="beatmapInfo">The beatmap info.</param>
         /// <returns>The total object count.</returns>
@@ -66,7 +66,7 @@ namespace LAsOsuBeatmapParser.Beatmaps
         }
 
         /// <summary>
-        /// Gets the end time object count for this beatmap.
+        ///     Gets the end time object count for this beatmap.
         /// </summary>
         /// <param name="beatmapInfo">The beatmap info.</param>
         /// <returns>The end time object count.</returns>
@@ -76,7 +76,7 @@ namespace LAsOsuBeatmapParser.Beatmaps
         }
 
         /// <summary>
-        /// Checks if this beatmap is from the same set as another.
+        ///     Checks if this beatmap is from the same set as another.
         /// </summary>
         /// <param name="beatmapInfo">The beatmap info.</param>
         /// <param name="other">The other beatmap info.</param>
@@ -87,7 +87,7 @@ namespace LAsOsuBeatmapParser.Beatmaps
         }
 
         /// <summary>
-        /// Gets the display title for this beatmap.
+        ///     Gets the display title for this beatmap.
         /// </summary>
         /// <param name="beatmapInfo">The beatmap info.</param>
         /// <returns>The display title.</returns>
@@ -97,7 +97,7 @@ namespace LAsOsuBeatmapParser.Beatmaps
         }
 
         /// <summary>
-        /// Gets the display title romanised for this beatmap.
+        ///     Gets the display title romanised for this beatmap.
         /// </summary>
         /// <param name="beatmapInfo">The beatmap info.</param>
         /// <returns>The display title romanised.</returns>

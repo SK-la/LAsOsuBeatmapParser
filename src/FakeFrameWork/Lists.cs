@@ -5,8 +5,8 @@ using System.Collections.Generic;
 namespace LAsOsuBeatmapParser.FakeFrameWork
 {
     /// <summary>
-    /// A list that maintains its elements in sorted order.
-    /// Allows duplicates.
+    ///     A list that maintains its elements in sorted order.
+    ///     Allows duplicates.
     /// </summary>
     /// <typeparam name="T">The type of elements in the list.</typeparam>
     public class SortedList<T> : IList<T>, IReadOnlyList<T>
@@ -15,7 +15,7 @@ namespace LAsOsuBeatmapParser.FakeFrameWork
         private readonly List<T> list = new List<T>();
 
         /// <summary>
-        /// Gets the number of elements contained in the list.
+        ///     Gets the number of elements contained in the list.
         /// </summary>
         public int Count
         {
@@ -23,7 +23,7 @@ namespace LAsOsuBeatmapParser.FakeFrameWork
         }
 
         /// <summary>
-        /// Gets a value indicating whether the list is read-only.
+        ///     Gets a value indicating whether the list is read-only.
         /// </summary>
         public bool IsReadOnly
         {
@@ -31,7 +31,7 @@ namespace LAsOsuBeatmapParser.FakeFrameWork
         }
 
         /// <summary>
-        /// Gets or sets the element at the specified index.
+        ///     Gets or sets the element at the specified index.
         /// </summary>
         /// <param name="index">The zero-based index of the element to get or set.</param>
         /// <returns>The element at the specified index.</returns>
@@ -43,18 +43,18 @@ namespace LAsOsuBeatmapParser.FakeFrameWork
         }
 
         /// <summary>
-        /// Adds an item to the list in sorted order.
+        ///     Adds an item to the list in sorted order.
         /// </summary>
         /// <param name="item">The item to add.</param>
         public void Add(T item)
         {
-            int index = list.BinarySearch(item);
+            int index            = list.BinarySearch(item);
             if (index < 0) index = ~index;
             list.Insert(index, item);
         }
 
         /// <summary>
-        /// Removes all items from the list.
+        ///     Removes all items from the list.
         /// </summary>
         public void Clear()
         {
@@ -62,7 +62,7 @@ namespace LAsOsuBeatmapParser.FakeFrameWork
         }
 
         /// <summary>
-        /// Determines whether the list contains a specific value.
+        ///     Determines whether the list contains a specific value.
         /// </summary>
         /// <param name="item">The object to locate in the list.</param>
         /// <returns>true if item is found in the list; otherwise, false.</returns>
@@ -72,7 +72,7 @@ namespace LAsOsuBeatmapParser.FakeFrameWork
         }
 
         /// <summary>
-        /// Copies the elements of the list to an array, starting at a particular array index.
+        ///     Copies the elements of the list to an array, starting at a particular array index.
         /// </summary>
         /// <param name="array">The one-dimensional array that is the destination of the elements copied from the list.</param>
         /// <param name="arrayIndex">The zero-based index in array at which copying begins.</param>
@@ -82,7 +82,7 @@ namespace LAsOsuBeatmapParser.FakeFrameWork
         }
 
         /// <summary>
-        /// Returns an enumerator that iterates through the collection.
+        ///     Returns an enumerator that iterates through the collection.
         /// </summary>
         /// <returns>An enumerator that can be used to iterate through the collection.</returns>
         public IEnumerator<T> GetEnumerator()
@@ -91,7 +91,7 @@ namespace LAsOsuBeatmapParser.FakeFrameWork
         }
 
         /// <summary>
-        /// Determines the index of a specific item in the list.
+        ///     Determines the index of a specific item in the list.
         /// </summary>
         /// <param name="item">The object to locate in the list.</param>
         /// <returns>The index of item if found in the list; otherwise, -1.</returns>
@@ -101,7 +101,7 @@ namespace LAsOsuBeatmapParser.FakeFrameWork
         }
 
         /// <summary>
-        /// Inserts an item to the list at the specified index. Note: This may break sorting.
+        ///     Inserts an item to the list at the specified index. Note: This may break sorting.
         /// </summary>
         /// <param name="index">The zero-based index at which item should be inserted.</param>
         /// <param name="item">The object to insert into the list.</param>
@@ -112,7 +112,7 @@ namespace LAsOsuBeatmapParser.FakeFrameWork
         }
 
         /// <summary>
-        /// Removes the first occurrence of a specific object from the list.
+        ///     Removes the first occurrence of a specific object from the list.
         /// </summary>
         /// <param name="item">The object to remove from the list.</param>
         /// <returns>true if item was successfully removed from the list; otherwise, false.</returns>
@@ -122,7 +122,7 @@ namespace LAsOsuBeatmapParser.FakeFrameWork
         }
 
         /// <summary>
-        /// Removes the element at the specified index of the list.
+        ///     Removes the element at the specified index of the list.
         /// </summary>
         /// <param name="index">The zero-based index of the element to remove.</param>
         public void RemoveAt(int index)
@@ -131,7 +131,7 @@ namespace LAsOsuBeatmapParser.FakeFrameWork
         }
 
         /// <summary>
-        /// Returns an enumerator that iterates through the collection.
+        ///     Returns an enumerator that iterates through the collection.
         /// </summary>
         /// <returns>An enumerator that can be used to iterate through the collection.</returns>
         IEnumerator IEnumerable.GetEnumerator()

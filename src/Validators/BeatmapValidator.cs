@@ -1,17 +1,16 @@
-using System;
 using System.Collections.Generic;
-using LAsOsuBeatmapParser.Extensions;
 using LAsOsuBeatmapParser.Beatmaps;
+using LAsOsuBeatmapParser.Extensions;
 
 namespace LAsOsuBeatmapParser.Validators
 {
     /// <summary>
-    /// 谱面验证器。
+    ///     谱面验证器。
     /// </summary>
     public static class BeatmapValidator
     {
         /// <summary>
-        /// 验证一个谱面。
+        ///     验证一个谱面。
         /// </summary>
         /// <param name="beatmap">要验证的谱面。</param>
         /// <returns>验证错误列表。</returns>
@@ -45,15 +44,17 @@ namespace LAsOsuBeatmapParser.Validators
             // Mania模式专属验证
             if (beatmap.Mode.Id == GameMode.Mania.Id)
             {
-                var maniaBeatmap = beatmap.GetManiaBeatmap();
+                Beatmap<ManiaHitObject> maniaBeatmap = beatmap.GetManiaBeatmap();
 
                 // 验证列数
                 int totalColumns = (int)maniaBeatmap.Difficulty.CircleSize;
 
                 // 验证ManiaHitObject的列索引
                 foreach (ManiaHitObject hitObject in maniaBeatmap.HitObjects)
+                {
                     if (hitObject.Column < 0 || hitObject.Column >= totalColumns)
                         errors.Add($"{hitObject.GetType().Name}列索引超出范围: {hitObject.Column} (应在0-{totalColumns - 1}之间)");
+                }
             }
 
             return errors;

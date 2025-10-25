@@ -1,11 +1,11 @@
+using System;
 using System.Collections.Generic;
-using System.Linq;
-using Xunit;
 using System.IO;
+using System.Linq;
 using System.Text;
 using LAsOsuBeatmapParser.Beatmaps;
 using LAsOsuBeatmapParser.Beatmaps.Formats;
-using LAsOsuBeatmapParser.Exceptions;
+using Xunit;
 using Xunit.Abstractions;
 
 namespace LAsOsuBeatmapParser.Tests
@@ -50,8 +50,8 @@ ApproachRate:5
 448,192,2500,1,0,0:0:0:0:
 ";
 
-            using var stream = new MemoryStream(Encoding.UTF8.GetBytes(osuContent));
-            var decoder = new LegacyBeatmapDecoder();
+            using var stream  = new MemoryStream(Encoding.UTF8.GetBytes(osuContent));
+            var       decoder = new LegacyBeatmapDecoder();
 
             // Act
             Beatmap beatmap = decoder.Decode(stream);
@@ -62,7 +62,7 @@ ApproachRate:5
             Assert.Equal("Test Artist", beatmap.Metadata.Artist);
             Assert.Equal(4, beatmap.HitObjects.Count);
             Assert.Equal(4, beatmap.Difficulty.CircleSize);
-            Assert.True(beatmap.BPM > 0); // BPM should be calculated
+            Assert.True(beatmap.BPM > 0);          // BPM should be calculated
             Assert.True(beatmap.Matrix.Count > 0); // Matrix should be built
         }
 
@@ -80,8 +80,8 @@ ApproachRate:5
 
             if (testDir == null)
                 yield break;
-            string resourceDir = Path.Combine(testDir, "Resource");
-            string[] files = Directory.GetFiles(resourceDir, "*.osu", SearchOption.AllDirectories);
+            string   resourceDir = Path.Combine(testDir, "Resource");
+            string[] files       = Directory.GetFiles(resourceDir, "*.osu", SearchOption.AllDirectories);
             foreach (string file in files) yield return new object[] { file };
         }
 
@@ -90,15 +90,15 @@ ApproachRate:5
         public void DecodeEncode_RoundTrip_Consistency(string osuFilePath)
         {
             // Arrange - Decode original file
-            using FileStream originalStream = File.OpenRead(osuFilePath);
-            var decoder = new LegacyBeatmapDecoder();
-            var encoder = new LegacyBeatmapEncoder();
-            Beatmap originalBeatmap = decoder.Decode(originalStream);
+            using FileStream originalStream  = File.OpenRead(osuFilePath);
+            var              decoder         = new LegacyBeatmapDecoder();
+            var              encoder         = new LegacyBeatmapEncoder();
+            Beatmap          originalBeatmap = decoder.Decode(originalStream);
 
             // Act - Encode then decode again
-            string encodedContent = encoder.EncodeToString(originalBeatmap);
-            using var encodedStream = new MemoryStream(Encoding.UTF8.GetBytes(encodedContent));
-            Beatmap decodedBeatmap = decoder.Decode(encodedStream);
+            string    encodedContent = encoder.EncodeToString(originalBeatmap);
+            using var encodedStream  = new MemoryStream(Encoding.UTF8.GetBytes(encodedContent));
+            Beatmap   decodedBeatmap = decoder.Decode(encodedStream);
 
             // Assert - Verify round-trip consistency
             Assert.Equal(originalBeatmap.Version, decodedBeatmap.Version);
@@ -124,7 +124,7 @@ ApproachRate:5
             for (int i = 0; i < originalBeatmap.TimingPoints.Count; i++)
             {
                 TimingPoint originalTp = originalBeatmap.TimingPoints[i];
-                TimingPoint decodedTp = decodedBeatmap.TimingPoints[i];
+                TimingPoint decodedTp  = decodedBeatmap.TimingPoints[i];
                 Assert.Equal(originalTp.Time, decodedTp.Time);
                 Assert.Equal(originalTp.BeatLength, decodedTp.BeatLength);
                 Assert.Equal(originalTp.Meter, decodedTp.Meter);
@@ -140,7 +140,7 @@ ApproachRate:5
             for (int i = 0; i < originalBeatmap.HitObjects.Count; i++)
             {
                 HitObject originalHo = originalBeatmap.HitObjects[i];
-                HitObject decodedHo = decodedBeatmap.HitObjects[i];
+                HitObject decodedHo  = decodedBeatmap.HitObjects[i];
 
                 // Check common properties
                 Assert.Equal(originalHo.StartTime, decodedHo.StartTime);
@@ -168,9 +168,9 @@ ApproachRate:5
         public void EncodeRealOsuFile_RoundTrip_PreservesContent()
         {
             // Arrange - Use specific test file
-            string testDir = Directory.GetCurrentDirectory();
-            string resourceDir = Path.Combine(testDir, "..", "..", "..", "Resource");
-            string testFilePath = Path.Combine(resourceDir, "Jumpstream - Happy Hardcore Synthesizer (SK_la) [5k-1].osu");
+            string testDir         = Directory.GetCurrentDirectory();
+            string resourceDir     = Path.Combine(testDir, "..", "..", "..", "Resource");
+            string testFilePath    = Path.Combine(resourceDir, "Jumpstream - Happy Hardcore Synthesizer (SK_la) [5k-1].osu");
             string originalContent = File.ReadAllText(testFilePath);
 
             _testOutputHelper.WriteLine("=== ORIGINAL FILE SUMMARY ===");
@@ -184,9 +184,9 @@ ApproachRate:5
 
             // Act - Decode and re-encode
             using FileStream originalStream = File.OpenRead(testFilePath);
-            var decoder = new LegacyBeatmapDecoder();
-            var encoder = new LegacyBeatmapEncoder();
-            Beatmap beatmap = decoder.Decode(originalStream);
+            var              decoder        = new LegacyBeatmapDecoder();
+            var              encoder        = new LegacyBeatmapEncoder();
+            Beatmap          beatmap        = decoder.Decode(originalStream);
 
             _testOutputHelper.WriteLine("=== PARSED BEATMAP PROPERTIES ===");
             _testOutputHelper.WriteLine($"Version: {beatmap.Version}");
@@ -255,48 +255,40 @@ ApproachRate:5
         public void EncodeRealOsuFile_FieldByFieldComparison()
         {
             // Arrange - Use specific test file
-            string testDir = Directory.GetCurrentDirectory();
-            string resourceDir = Path.Combine(testDir, "..", "..", "..", "Resource");
+            string testDir      = Directory.GetCurrentDirectory();
+            string resourceDir  = Path.Combine(testDir, "..", "..", "..", "Resource");
             string testFilePath = Path.Combine(resourceDir, "Glen Check - 60's Cardin (SK_la) [Insane].osu");
 
             // Act - Decode and re-encode
             using FileStream originalStream = File.OpenRead(testFilePath);
-            var decoder = new LegacyBeatmapDecoder();
-            var encoder = new LegacyBeatmapEncoder();
-            Beatmap beatmap = decoder.Decode(originalStream);
-            var emptyToString = beatmap.HitObjects.Where(ho => string.IsNullOrEmpty(ho.ToString())).ToList();
+            var              decoder        = new LegacyBeatmapDecoder();
+            var              encoder        = new LegacyBeatmapEncoder();
+            Beatmap          beatmap        = decoder.Decode(originalStream);
+            List<HitObject>  emptyToString  = beatmap.HitObjects.Where(ho => string.IsNullOrEmpty(ho.ToString())).ToList();
             _testOutputHelper.WriteLine($"Empty ToString count: {emptyToString.Count}");
-            if (emptyToString.Any())
-            {
-                _testOutputHelper.WriteLine($"First empty: Type={emptyToString[0].Type}, StartTime={emptyToString[0].StartTime}, Position={emptyToString[0].Position}");
-            }
-            var invalidToString = beatmap.HitObjects.Where(ho => string.IsNullOrEmpty(ho.ToString().Trim())).ToList();
+            if (emptyToString.Any()) _testOutputHelper.WriteLine($"First empty: Type={emptyToString[0].Type}, StartTime={emptyToString[0].StartTime}, Position={emptyToString[0].Position}");
+            List<HitObject> invalidToString = beatmap.HitObjects.Where(ho => string.IsNullOrEmpty(ho.ToString().Trim())).ToList();
             _testOutputHelper.WriteLine($"Invalid ToString count: {invalidToString.Count}");
-            if (invalidToString.Any())
-            {
-                _testOutputHelper.WriteLine($"First invalid: '{invalidToString[0].ToString()}'");
-            }
+            if (invalidToString.Any()) _testOutputHelper.WriteLine($"First invalid: '{invalidToString[0]}'");
 
             // Check for duplicate ToString outputs
-            var toStringGroups = beatmap.HitObjects.GroupBy(ho => ho.ToString().Trim())
-                .Where(g => g.Count() > 1)
-                .ToList();
+            List<IGrouping<string, HitObject>> toStringGroups = beatmap.HitObjects.GroupBy(ho => ho.ToString().Trim())
+                                                                       .Where(g => g.Count() > 1)
+                                                                       .ToList();
             _testOutputHelper.WriteLine($"Duplicate ToString groups: {toStringGroups.Count}");
-            foreach (var group in toStringGroups)
+
+            foreach (IGrouping<string, HitObject> group in toStringGroups)
             {
                 _testOutputHelper.WriteLine($"  Duplicate '{group.Key}': {group.Count()} times");
+
                 // Show details of each duplicate
-                foreach (var ho in group)
+                foreach (HitObject ho in group)
                 {
                     var maniaHo = ho as ManiaHitObject;
                     if (maniaHo != null)
-                    {
                         _testOutputHelper.WriteLine($"    Object: Time={ho.StartTime}, Pos={ho.Position}, Type={ho.Type}, GetType={ho.GetType().Name}, Column={maniaHo.Column}");
-                    }
                     else
-                    {
                         _testOutputHelper.WriteLine($"    Object: Time={ho.StartTime}, Pos={ho.Position}, Type={ho.Type}, GetType={ho.GetType().Name}");
-                    }
                 }
             }
 
@@ -305,30 +297,25 @@ ApproachRate:5
             _testOutputHelper.WriteLine($"Encoded content length: {encodedContent.Length}");
 
             // Count HitObjects in encoded content
-            string[] lines = encodedContent.Split('\n');
-            bool inHitObjects = false;
-            int hitObjectsCount = 0;
+            string[] lines           = encodedContent.Split('\n');
+            bool     inHitObjects    = false;
+            int      hitObjectsCount = 0;
+
             foreach (string line in lines)
             {
                 string trimmed = line.Trim();
                 if (trimmed == "[HitObjects]")
-                {
                     inHitObjects = true;
-                }
                 else if (trimmed.StartsWith("[") && trimmed.EndsWith("]") && inHitObjects)
-                {
                     break;
-                }
-                else if (inHitObjects && !string.IsNullOrEmpty(trimmed) && !trimmed.StartsWith("//"))
-                {
-                    hitObjectsCount++;
-                }
+                else if (inHitObjects && !string.IsNullOrEmpty(trimmed) && !trimmed.StartsWith("//")) hitObjectsCount++;
             }
+
             _testOutputHelper.WriteLine($"HitObjects lines in encoded content: {hitObjectsCount}");
 
             // Parse both original and encoded content into dictionaries for comparison
             Dictionary<string, Dictionary<string, string>> originalFields = ParseOsuFileToFields(File.ReadAllText(testFilePath));
-            Dictionary<string, Dictionary<string, string>> encodedFields = ParseOsuFileToFields(encodedContent);
+            Dictionary<string, Dictionary<string, string>> encodedFields  = ParseOsuFileToFields(encodedContent);
 
             _testOutputHelper.WriteLine("=== FIELD-BY-FIELD COMPARISON ===");
 
@@ -338,7 +325,7 @@ ApproachRate:5
             foreach (string sectionName in originalFields.Keys)
             {
                 _testOutputHelper.WriteLine($"{sectionName} Section:");
-                bool sectionMatches = CompareSectionFields(originalFields, encodedFields, sectionName, _testOutputHelper);
+                bool sectionMatches                 = CompareSectionFields(originalFields, encodedFields, sectionName, _testOutputHelper);
                 if (!sectionMatches) allFieldsMatch = false;
             }
 
@@ -359,9 +346,9 @@ ApproachRate:5
 
         private Dictionary<string, Dictionary<string, string>> ParseOsuFileToFields(string content)
         {
-            var result = new Dictionary<string, Dictionary<string, string>>();
-            string[] lines = content.Split('\n');
-            string currentSection = "";
+            var      result         = new Dictionary<string, Dictionary<string, string>>();
+            string[] lines          = content.Split('\n');
+            string   currentSection = "";
 
             foreach (string line in lines)
             {
@@ -371,7 +358,7 @@ ApproachRate:5
 
                 if (trimmedLine.StartsWith("[") && trimmedLine.EndsWith("]"))
                 {
-                    currentSection = trimmedLine[1..^1];
+                    currentSection         = trimmedLine[1..^1];
                     result[currentSection] = new Dictionary<string, string>();
                     continue;
                 }
@@ -382,7 +369,7 @@ ApproachRate:5
 
                     if (parts.Length == 2)
                     {
-                        string key = parts[0].Trim();
+                        string key   = parts[0].Trim();
                         string value = parts[1].Trim();
                         result[currentSection][key] = value;
                     }
@@ -397,11 +384,10 @@ ApproachRate:5
             return result;
         }
 
-        private bool CompareSectionFields(
-            Dictionary<string, Dictionary<string, string>> original,
-            Dictionary<string, Dictionary<string, string>> encoded,
-            string sectionName,
-            ITestOutputHelper output)
+        private bool CompareSectionFields(Dictionary<string, Dictionary<string, string>> original,
+                                          Dictionary<string, Dictionary<string, string>> encoded,
+                                          string                                         sectionName,
+                                          ITestOutputHelper                              output)
         {
             bool sectionMatches = true;
 
@@ -418,32 +404,32 @@ ApproachRate:5
             }
 
             Dictionary<string, string> originalFields = original[sectionName];
-            Dictionary<string, string> encodedFields = encoded[sectionName];
+            Dictionary<string, string> encodedFields  = encoded[sectionName];
 
             if (sectionName == "HitObjects")
             {
                 // Special handling for HitObjects: only check note count and first 20 timelines
-                int originalCount = originalFields.Count;
-                int encodedCount = encodedFields.Count;
-                bool countMatch = originalCount == encodedCount;
+                int  originalCount = originalFields.Count;
+                int  encodedCount  = encodedFields.Count;
+                bool countMatch    = originalCount == encodedCount;
                 output.WriteLine($"  Note count: {originalCount} -> {encodedCount} {(countMatch ? "✓" : "⚠")}");
                 // Note: Count mismatch treated as warning, not failure, since timelines match and data integrity is preserved
                 if (!countMatch) sectionMatches = false;
 
                 // Check first 10 timelines (timestamps)
-                int minCount = System.Math.Min(originalCount, encodedCount);
-                int checkCount = System.Math.Min(10, minCount);
+                int minCount     = Math.Min(originalCount, encodedCount);
+                int checkCount   = Math.Min(10, minCount);
                 var originalKeys = new List<string>(originalFields.Keys);
-                var encodedKeys = new List<string>(encodedFields.Keys);
+                var encodedKeys  = new List<string>(encodedFields.Keys);
 
                 for (int i = 0; i < checkCount; i++)
                 {
                     string originalKey = originalKeys[i];
-                    string encodedKey = encodedKeys[i];
+                    string encodedKey  = encodedKeys[i];
                     // Extract timestamp (third comma-separated value)
                     string originalTimestamp = originalKey.Split(',')[2];
-                    string encodedTimestamp = encodedKey.Split(',')[2];
-                    bool match = originalTimestamp == encodedTimestamp;
+                    string encodedTimestamp  = encodedKey.Split(',')[2];
+                    bool   match             = originalTimestamp == encodedTimestamp;
                     output.WriteLine($"  Timeline {i + 1}: '{originalTimestamp}' -> '{encodedTimestamp}' {(match ? "✓" : "✗")}");
                     if (!match) sectionMatches = false;
                 }
@@ -456,8 +442,8 @@ ApproachRate:5
                 if (encodedFields.ContainsKey(field.Key))
                 {
                     string originalValue = field.Value;
-                    string encodedValue = encodedFields[field.Key];
-                    bool match = originalValue == encodedValue;
+                    string encodedValue  = encodedFields[field.Key];
+                    bool   match         = originalValue == encodedValue;
                     output.WriteLine($"  {field.Key}: '{originalValue}' -> '{encodedValue}' {(match ? "✓" : "✗")}");
                     if (!match) sectionMatches = false;
                 }
@@ -495,16 +481,16 @@ ApproachRate:5
             }
 
             string testFile = Path.Combine(testDir ?? "", "Resource", "Glen Check - 60's Cardin (SK_la) [Insane].osu");
-            var decoder = new LegacyBeatmapDecoder();
+            var    decoder  = new LegacyBeatmapDecoder();
 
             // Act
-            Beatmap beatmap = decoder.Decode(testFile);
-            var statistics = beatmap.GetStatistics().ToList();
+            Beatmap                beatmap    = decoder.Decode(testFile);
+            List<BeatmapStatistic> statistics = beatmap.GetStatistics().ToList();
 
             // Assert
             Assert.NotNull(statistics);
             Assert.Single(statistics);
-            var stat = statistics[0];
+            BeatmapStatistic stat = statistics[0];
             Assert.Equal("Hit Objects", stat.Name);
             Assert.Equal(beatmap.HitObjects.Count.ToString(), stat.Content);
             Assert.True(stat.TotalNotes > 0);

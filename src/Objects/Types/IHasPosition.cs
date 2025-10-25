@@ -3,12 +3,12 @@
 namespace LAsOsuBeatmapParser.Objects.Types
 {
     /// <summary>
-    /// A HitObject that has a starting position.
+    ///     A HitObject that has a starting position.
     /// </summary>
     public interface IHasPosition : IHasXPosition, IHasYPosition
     {
         /// <summary>
-        /// The starting position of the HitObject.
+        ///     The starting position of the HitObject.
         /// </summary>
         (float X, float Y) Position { get; set; }
     }

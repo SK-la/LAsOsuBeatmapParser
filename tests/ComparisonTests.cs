@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using LAsOsuBeatmapParser.Analysis;
 using LAsOsuBeatmapParser.Beatmaps;
 using LAsOsuBeatmapParser.Beatmaps.Formats;
@@ -12,13 +13,11 @@ using Xunit.Abstractions;
 namespace LAsOsuBeatmapParser.Tests
 {
     /// <summary>
-    /// C#+Rust所有SR算法对比测试
-    /// 测试单一文件计算一次，多个文件计算一次
+    ///     C#+Rust所有SR算法对比测试
+    ///     测试单一文件计算一次，多个文件计算一次
     /// </summary>
     public class ComparisonTests
     {
-        private readonly ITestOutputHelper _output;
-
         // SR显示精度控制常量
         private const int SR_DECIMAL_PLACES = 4;
 
@@ -33,7 +32,8 @@ namespace LAsOsuBeatmapParser.Tests
             "Glen Check - 60's Cardin (SK_la) [Insane].osu"
         );
 
-        private static readonly string[] MultipleTestFiles = Directory.GetFiles(TestResourceDir, "*.osu");
+        private static readonly string[]          MultipleTestFiles = Directory.GetFiles(TestResourceDir, "*.osu");
+        private readonly        ITestOutputHelper _output;
 
         public ComparisonTests(ITestOutputHelper output)
         {
@@ -45,10 +45,10 @@ namespace LAsOsuBeatmapParser.Tests
         {
             // Arrange
             Assert.True(File.Exists(SingleTestFile), $"Test file not found: {SingleTestFile}");
-            var decoder = new LegacyBeatmapDecoder();
+            var     decoder = new LegacyBeatmapDecoder();
             Beatmap beatmap = decoder.Decode(SingleTestFile);
 
-            _output.WriteLine($"=== C#+Rust SR算法对比 - 单一文件测试 ===");
+            _output.WriteLine("=== C#+Rust SR算法对比 - 单一文件测试 ===");
             _output.WriteLine($"CS值: {beatmap.BeatmapInfo.Difficulty.CircleSize}");
             _output.WriteLine($"谱面信息: {beatmap.BeatmapInfo.Metadata.Artist} - {beatmap.BeatmapInfo.Metadata.Title} [{beatmap.BeatmapInfo.Metadata.Version}]");
             _output.WriteLine($"键数: {(int)beatmap.BeatmapInfo.Difficulty.CircleSize}k");
@@ -78,12 +78,12 @@ namespace LAsOsuBeatmapParser.Tests
             {
                 long initialMemory = GC.GetAllocatedBytesForCurrentThread();
 
-                var stopwatch = Stopwatch.StartNew();
-                double sr = calculator(beatmap);
+                var    stopwatch = Stopwatch.StartNew();
+                double sr        = calculator(beatmap);
                 stopwatch.Stop();
 
                 long finalMemory = GC.GetAllocatedBytesForCurrentThread();
-                long memoryUsed = finalMemory - initialMemory;
+                long memoryUsed  = finalMemory - initialMemory;
 
                 results.Add((name, sr, stopwatch.ElapsedMilliseconds, memoryUsed));
 
@@ -94,7 +94,7 @@ namespace LAsOsuBeatmapParser.Tests
                 _output.WriteLine("");
 
                 // 计算间隔延迟
-                System.Threading.Thread.Sleep(50);
+                Thread.Sleep(50);
             }
 
             // Assert - 验证结果合理性
@@ -113,7 +113,7 @@ namespace LAsOsuBeatmapParser.Tests
             // Arrange
             var decoder = new LegacyBeatmapDecoder();
 
-            _output.WriteLine($"=== C#+Rust SR算法对比 - 多个文件测试 ===");
+            _output.WriteLine("=== C#+Rust SR算法对比 - 多个文件测试 ===");
             _output.WriteLine($"测试文件数量: {MultipleTestFiles.Length}");
             _output.WriteLine("");
 
@@ -128,13 +128,13 @@ namespace LAsOsuBeatmapParser.Tests
             // 定义所有算法
             var algorithms = new (string name, Func<Beatmap, string, double> calculator)[]
             {
-                ("C# Current", (bm, fp) => SRCalculator.Instance.CalculateSR(bm, out _)),
-                ("C# Rust", (bm, fp) => SRCalculator.Instance.CalculateSRRust(bm)),
-                ("C# FromFile", (bm, fp) => CalculateSRFromFile(fp)),
-                ("C# FromContent", (bm, fp) => CalculateSRFromContent(File.ReadAllText(fp))),
-                ("Rust FromFile", (bm, fp) => SRCalculatorRust.CalculateSR_FromFile(fp) ?? -1),
+                ("C# Current", (bm,       fp) => SRCalculator.Instance.CalculateSR(bm, out _)),
+                ("C# Rust", (bm,          fp) => SRCalculator.Instance.CalculateSRRust(bm)),
+                ("C# FromFile", (bm,      fp) => CalculateSRFromFile(fp)),
+                ("C# FromContent", (bm,   fp) => CalculateSRFromContent(File.ReadAllText(fp))),
+                ("Rust FromFile", (bm,    fp) => SRCalculatorRust.CalculateSR_FromFile(fp) ?? -1),
                 ("Rust FromContent", (bm, fp) => SRCalculatorRust.CalculateSR_FromContent(File.ReadAllText(fp)) ?? -1),
-                ("Rust FromJson", (bm, fp) => SRCalculatorRust.CalculateSR_FromJson(SRCalculatorRust.ConvertBeatmapToJson(bm)) ?? -1)
+                ("Rust FromJson", (bm,    fp) => SRCalculatorRust.CalculateSR_FromJson(SRCalculatorRust.ConvertBeatmapToJson(bm)) ?? -1)
             };
 
             // Act - 每个文件每个算法计算一次
@@ -146,17 +146,17 @@ namespace LAsOsuBeatmapParser.Tests
                 {
                     long initialMemory = GC.GetAllocatedBytesForCurrentThread();
 
-                    var stopwatch = Stopwatch.StartNew();
-                    double sr = calculator(beatmap, filePath);
+                    var    stopwatch = Stopwatch.StartNew();
+                    double sr        = calculator(beatmap, filePath);
                     stopwatch.Stop();
 
                     long finalMemory = GC.GetAllocatedBytesForCurrentThread();
-                    long memoryUsed = finalMemory - initialMemory;
+                    long memoryUsed  = finalMemory - initialMemory;
 
                     results.Add((beatmap.BeatmapInfo.Difficulty.CircleSize, algorithmName, sr, stopwatch.ElapsedMilliseconds, memoryUsed));
 
                     // 计算间隔延迟
-                    System.Threading.Thread.Sleep(10);
+                    Thread.Sleep(10);
                 }
             }
 
@@ -170,10 +170,10 @@ namespace LAsOsuBeatmapParser.Tests
             // 计算统计信息
             IEnumerable<IGrouping<string, (double cs, string algorithm, double sr, long timeMs, long memoryBytes)>> algorithmGroups = results.GroupBy(r => r.algorithm);
 
-            foreach (var group in algorithmGroups)
+            foreach (IGrouping<string, (double cs, string algorithm, double sr, long timeMs, long memoryBytes)> group in algorithmGroups)
             {
-                double avgSR = group.Average(r => r.sr);
-                double avgTime = group.Average(r => r.timeMs);
+                double avgSR     = group.Average(r => r.sr);
+                double avgTime   = group.Average(r => r.timeMs);
                 double avgMemory = group.Average(r => r.memoryBytes);
 
                 _output.WriteLine($"{group.Key} 统计:");
@@ -190,10 +190,10 @@ namespace LAsOsuBeatmapParser.Tests
         public void TestComparisonEncodedOutputFile_Once()
         {
             // Arrange
-            var decoder = new LegacyBeatmapDecoder();
+            var     decoder = new LegacyBeatmapDecoder();
             Beatmap beatmap = decoder.Decode(SingleTestFile);
 
-            _output.WriteLine($"=== C#+Rust SR算法对比 - test10K--6.1SR.osu测试 ===");
+            _output.WriteLine("=== C#+Rust SR算法对比 - test10K--6.1SR.osu测试 ===");
             _output.WriteLine($"CS值: {beatmap.BeatmapInfo.Difficulty.CircleSize}");
             _output.WriteLine($"谱面信息: {beatmap.BeatmapInfo.Metadata.Artist} - {beatmap.BeatmapInfo.Metadata.Title} [{beatmap.BeatmapInfo.Metadata.Version}]");
             _output.WriteLine($"键数: {(int)beatmap.BeatmapInfo.Difficulty.CircleSize}k");
@@ -223,12 +223,12 @@ namespace LAsOsuBeatmapParser.Tests
             {
                 long initialMemory = GC.GetAllocatedBytesForCurrentThread();
 
-                var stopwatch = Stopwatch.StartNew();
-                double sr = calculator(beatmap);
+                var    stopwatch = Stopwatch.StartNew();
+                double sr        = calculator(beatmap);
                 stopwatch.Stop();
 
                 long finalMemory = GC.GetAllocatedBytesForCurrentThread();
-                long memoryUsed = finalMemory - initialMemory;
+                long memoryUsed  = finalMemory - initialMemory;
 
                 results.Add((name, sr, stopwatch.ElapsedMilliseconds, memoryUsed));
 
@@ -239,7 +239,7 @@ namespace LAsOsuBeatmapParser.Tests
                 _output.WriteLine("");
 
                 // 计算间隔延迟
-                System.Threading.Thread.Sleep(50);
+                Thread.Sleep(50);
             }
 
             // Assert - 验证结果合理性

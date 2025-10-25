@@ -1,12 +1,11 @@
-using System;
 using System.Collections.Generic;
-using Xunit;
-using Xunit.Abstractions;
 using System.IO;
+using System.Reflection;
 using System.Text;
 using LAsOsuBeatmapParser.Beatmaps;
 using LAsOsuBeatmapParser.Beatmaps.Formats;
-using LAsOsuBeatmapParser.Extensions;
+using Xunit;
+using Xunit.Abstractions;
 
 namespace LAsOsuBeatmapParser.Tests
 {
@@ -25,32 +24,32 @@ namespace LAsOsuBeatmapParser.Tests
             // Arrange
             var beatmap = new Beatmap
             {
-                Mode = GameMode.Mania,
+                Mode    = GameMode.Mania,
                 Version = 14,
                 BeatmapInfo = new BeatmapInfo
                 {
                     Metadata = new BeatmapMetadata
                     {
-                        Title = "Test Song",
-                        Artist = "Test Artist",
-                        Author = new BeatmapAuthor { Username = "Test Creator" },
+                        Title   = "Test Song",
+                        Artist  = "Test Artist",
+                        Author  = new BeatmapAuthor { Username = "Test Creator" },
                         Version = "Easy"
                     },
                     DifficultyName = "Easy",
                     Difficulty = new BeatmapDifficulty
                     {
-                        HPDrainRate = 5,
-                        CircleSize = 4,
+                        HPDrainRate       = 5,
+                        CircleSize        = 4,
                         OverallDifficulty = 5,
-                        ApproachRate = 5
+                        ApproachRate      = 5
                     }
                 },
                 DifficultyLegacy = new BeatmapDifficulty
                 {
-                    HPDrainRate = 5,
-                    CircleSize = 4,
+                    HPDrainRate       = 5,
+                    CircleSize        = 4,
                     OverallDifficulty = 5,
-                    ApproachRate = 5
+                    ApproachRate      = 5
                 },
                 TimingPoints = new List<TimingPoint>
                 {
@@ -90,32 +89,32 @@ namespace LAsOsuBeatmapParser.Tests
             // Arrange - Create a test beatmap
             var originalBeatmap = new Beatmap
             {
-                Mode = GameMode.Mania,
+                Mode    = GameMode.Mania,
                 Version = 14,
                 BeatmapInfo = new BeatmapInfo
                 {
                     Metadata = new BeatmapMetadata
                     {
-                        Title = "Round Trip Test",
-                        Artist = "Test Artist",
-                        Author = new BeatmapAuthor { Username = "Test Creator" },
+                        Title   = "Round Trip Test",
+                        Artist  = "Test Artist",
+                        Author  = new BeatmapAuthor { Username = "Test Creator" },
                         Version = "Test"
                     },
                     DifficultyName = "Test",
                     Difficulty = new BeatmapDifficulty
                     {
-                        HPDrainRate = 6,
-                        CircleSize = 7,
+                        HPDrainRate       = 6,
+                        CircleSize        = 7,
                         OverallDifficulty = 8,
-                        ApproachRate = 9
+                        ApproachRate      = 9
                     }
                 },
                 DifficultyLegacy = new BeatmapDifficulty
                 {
-                    HPDrainRate = 6,
-                    CircleSize = 7,
+                    HPDrainRate       = 6,
+                    CircleSize        = 7,
                     OverallDifficulty = 8,
-                    ApproachRate = 9
+                    ApproachRate      = 9
                 },
                 TimingPoints = new List<TimingPoint>
                 {
@@ -133,9 +132,9 @@ namespace LAsOsuBeatmapParser.Tests
             var decoder = new LegacyBeatmapDecoder();
 
             // Act - Encode then decode
-            string encodedContent = encoder.EncodeToString(originalBeatmap);
-            using var stream = new MemoryStream(Encoding.UTF8.GetBytes(encodedContent));
-            Beatmap decodedBeatmap = decoder.Decode(stream);
+            string    encodedContent = encoder.EncodeToString(originalBeatmap);
+            using var stream         = new MemoryStream(Encoding.UTF8.GetBytes(encodedContent));
+            Beatmap   decodedBeatmap = decoder.Decode(stream);
 
             // Assert - Check key properties are preserved
             Assert.Equal(originalBeatmap.Mode, decodedBeatmap.Mode);
@@ -153,22 +152,22 @@ namespace LAsOsuBeatmapParser.Tests
             // Test coordinate conversion for different key counts
             var testCases = new[]
             {
-                (keyCount: 4, column: 0, expectedX: 64), // 4k: round((0) * (512/4) + 256/4) = 64
+                (keyCount: 4, column: 0, expectedX: 64),  // 4k: round((0) * (512/4) + 256/4) = 64
                 (keyCount: 4, column: 1, expectedX: 192), // 4k: round(1 * 128 + 64) = 192
                 (keyCount: 4, column: 2, expectedX: 320), // 4k: round(2 * 128 + 64) = 320
                 (keyCount: 4, column: 3, expectedX: 448), // 4k: round(3 * 128 + 64) = 448
-                (keyCount: 7, column: 0, expectedX: 37), // 7k: round(0 * (512/7) + 256/7) ≈ 37
+                (keyCount: 7, column: 0, expectedX: 37),  // 7k: round(0 * (512/7) + 256/7) ≈ 37
                 (keyCount: 7, column: 3, expectedX: 256), // 7k: round(3 * 73.142857 + 36.571) ≈ 256
-                (keyCount: 7, column: 6, expectedX: 475) // 7k: round(6 * 73.142857 + 36.571) ≈ 475
+                (keyCount: 7, column: 6, expectedX: 475)  // 7k: round(6 * 73.142857 + 36.571) ≈ 475
             };
 
             foreach ((int keyCount, int column, int expectedX) in testCases)
             {
                 // Test encoding (column to x)
-                var maniaHit = new ManiaHitObject(1000, column, keyCount);
-                string encoded = maniaHit.ToString();
-                string[] parts = encoded.Split(',');
-                int actualX = int.Parse(parts[0]);
+                var      maniaHit = new ManiaHitObject(1000, column, keyCount);
+                string   encoded  = maniaHit.ToString();
+                string[] parts    = encoded.Split(',');
+                int      actualX  = int.Parse(parts[0]);
 
                 // Allow small rounding differences
                 Assert.InRange(actualX, expectedX - 2, expectedX + 2);
@@ -181,15 +180,15 @@ namespace LAsOsuBeatmapParser.Tests
             {
                 var beatmap = new Beatmap
                 {
-                    Mode = GameMode.Mania,
+                    Mode       = GameMode.Mania,
                     Difficulty = new BeatmapDifficulty { CircleSize = keyCount }
                 };
 
-                string line = $"{expectedX},192,1000,1,0,0:0:0:0:";
+                string   line  = $"{expectedX},192,1000,1,0,0:0:0:0:";
                 string[] parts = line.Split(',');
 
                 var maniaHit = decoder.GetType()
-                                      .GetMethod("ParseManiaHitObject", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
+                                      .GetMethod("ParseManiaHitObject", BindingFlags.NonPublic | BindingFlags.Instance)
                                      ?.Invoke(decoder, new object[] { beatmap, parts }) as ManiaHitObject;
 
                 Assert.NotNull(maniaHit);
@@ -210,7 +209,7 @@ namespace LAsOsuBeatmapParser.Tests
                 {
                     Metadata = new BeatmapMetadata
                     {
-                        Title = "File Test",
+                        Title  = "File Test",
                         Artist = "Test",
                         Author = new BeatmapAuthor { Username = "Creator" }
                     },
@@ -219,7 +218,7 @@ namespace LAsOsuBeatmapParser.Tests
                 HitObjects = new List<HitObject> { new ManiaHitObject(1000, 0) }
             };
 
-            var encoder = new LegacyBeatmapEncoder();
+            var    encoder  = new LegacyBeatmapEncoder();
             string tempFile = Path.GetTempFileName() + ".osu";
 
             try
@@ -256,12 +255,12 @@ namespace LAsOsuBeatmapParser.Tests
             Assert.NotNull(testDir); // Ensure we found the Resource directory
 
             string testFilePath = Path.Combine(testDir, "Resource", "Jumpstream - Happy Hardcore Synthesizer (SK_la) [5k-1].osu");
-            var decoder = new LegacyBeatmapDecoder();
-            var encoder = new LegacyBeatmapEncoder();
+            var    decoder      = new LegacyBeatmapDecoder();
+            var    encoder      = new LegacyBeatmapEncoder();
 
             // Load and parse the real osu file
-            using FileStream stream = File.OpenRead(testFilePath);
-            Beatmap originalBeatmap = decoder.Decode(stream);
+            using FileStream stream          = File.OpenRead(testFilePath);
+            Beatmap          originalBeatmap = decoder.Decode(stream);
 
             // Debug: Output original beatmap version
             _output.WriteLine($"Original beatmap version: {originalBeatmap.Version}");
@@ -294,8 +293,8 @@ namespace LAsOsuBeatmapParser.Tests
             // Assert.Contains("[HitObjects]", encodedContent);
 
             // Verify the encoded content can be parsed back
-            using var encodedStream = new MemoryStream(Encoding.UTF8.GetBytes(encodedContent));
-            Beatmap decodedBeatmap = decoder.Decode(encodedStream);
+            using var encodedStream  = new MemoryStream(Encoding.UTF8.GetBytes(encodedContent));
+            Beatmap   decodedBeatmap = decoder.Decode(encodedStream);
 
             // Verify key properties are preserved
             Assert.Equal(GameMode.Mania, decodedBeatmap.Mode);
@@ -323,32 +322,32 @@ namespace LAsOsuBeatmapParser.Tests
             // Arrange
             var beatmap = new Beatmap
             {
-                Mode = GameMode.Mania,
+                Mode    = GameMode.Mania,
                 Version = 14,
                 BeatmapInfo = new BeatmapInfo
                 {
                     Metadata = new BeatmapMetadata
                     {
-                        Title = "Test Song",
-                        Artist = "Test Artist",
-                        Author = new BeatmapAuthor { Username = "Test Creator" },
+                        Title   = "Test Song",
+                        Artist  = "Test Artist",
+                        Author  = new BeatmapAuthor { Username = "Test Creator" },
                         Version = "Easy"
                     },
                     DifficultyName = "Easy",
                     Difficulty = new BeatmapDifficulty
                     {
-                        HPDrainRate = 5,
-                        CircleSize = 4,
+                        HPDrainRate       = 5,
+                        CircleSize        = 4,
                         OverallDifficulty = 5,
-                        ApproachRate = 5
+                        ApproachRate      = 5
                     }
                 },
                 DifficultyLegacy = new BeatmapDifficulty
                 {
-                    HPDrainRate = 5,
-                    CircleSize = 4,
+                    HPDrainRate       = 5,
+                    CircleSize        = 4,
                     OverallDifficulty = 5,
-                    ApproachRate = 5
+                    ApproachRate      = 5
                 },
                 HitObjects = new List<HitObject>
                 {
@@ -358,11 +357,11 @@ namespace LAsOsuBeatmapParser.Tests
             };
 
             // Act - Default version
-            var defaultEncoder = new LegacyBeatmapEncoder();
+            var    defaultEncoder = new LegacyBeatmapEncoder();
             string defaultContent = defaultEncoder.EncodeToString(beatmap);
 
             // Act - Lazer version
-            var lazerEncoder = new LegacyBeatmapEncoder(true);
+            var    lazerEncoder = new LegacyBeatmapEncoder(true);
             string lazerContent = lazerEncoder.EncodeToString(beatmap);
 
             // Assert

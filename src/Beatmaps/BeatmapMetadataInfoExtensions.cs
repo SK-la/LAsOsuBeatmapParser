@@ -1,12 +1,12 @@
 namespace LAsOsuBeatmapParser.Beatmaps
 {
     /// <summary>
-    /// Extension methods for <see cref="IBeatmapMetadataInfo"/>.
+    ///     Extension methods for <see cref="IBeatmapMetadataInfo" />.
     /// </summary>
     public static class BeatmapMetadataInfoExtensions
     {
         /// <summary>
-        /// Gets the romanised title.
+        ///     Gets the romanised title.
         /// </summary>
         /// <param name="metadata">The metadata.</param>
         /// <returns>The romanised title.</returns>
@@ -16,7 +16,7 @@ namespace LAsOsuBeatmapParser.Beatmaps
         }
 
         /// <summary>
-        /// Gets the unicode title.
+        ///     Gets the unicode title.
         /// </summary>
         /// <param name="metadata">The metadata.</param>
         /// <returns>The unicode title.</returns>
@@ -26,7 +26,7 @@ namespace LAsOsuBeatmapParser.Beatmaps
         }
 
         /// <summary>
-        /// Gets the romanised artist.
+        ///     Gets the romanised artist.
         /// </summary>
         /// <param name="metadata">The metadata.</param>
         /// <returns>The romanised artist.</returns>
@@ -36,7 +36,7 @@ namespace LAsOsuBeatmapParser.Beatmaps
         }
 
         /// <summary>
-        /// Gets the unicode artist.
+        ///     Gets the unicode artist.
         /// </summary>
         /// <param name="metadata">The metadata.</param>
         /// <returns>The unicode artist.</returns>
@@ -46,7 +46,7 @@ namespace LAsOsuBeatmapParser.Beatmaps
         }
 
         /// <summary>
-        /// Gets the author.
+        ///     Gets the author.
         /// </summary>
         /// <param name="metadata">The metadata.</param>
         /// <returns>The author.</returns>
@@ -56,7 +56,7 @@ namespace LAsOsuBeatmapParser.Beatmaps
         }
 
         /// <summary>
-        /// Gets the source.
+        ///     Gets the source.
         /// </summary>
         /// <param name="metadata">The metadata.</param>
         /// <returns>The source.</returns>
@@ -66,7 +66,7 @@ namespace LAsOsuBeatmapParser.Beatmaps
         }
 
         /// <summary>
-        /// Gets the tags.
+        ///     Gets the tags.
         /// </summary>
         /// <param name="metadata">The metadata.</param>
         /// <returns>The tags.</returns>
@@ -76,7 +76,7 @@ namespace LAsOsuBeatmapParser.Beatmaps
         }
 
         /// <summary>
-        /// Gets the preview time.
+        ///     Gets the preview time.
         /// </summary>
         /// <param name="metadata">The metadata.</param>
         /// <returns>The preview time.</returns>
@@ -86,7 +86,7 @@ namespace LAsOsuBeatmapParser.Beatmaps
         }
 
         /// <summary>
-        /// Gets the audio file.
+        ///     Gets the audio file.
         /// </summary>
         /// <param name="metadata">The metadata.</param>
         /// <returns>The audio file.</returns>
@@ -96,7 +96,7 @@ namespace LAsOsuBeatmapParser.Beatmaps
         }
 
         /// <summary>
-        /// Gets the background file.
+        ///     Gets the background file.
         /// </summary>
         /// <param name="metadata">The metadata.</param>
         /// <returns>The background file.</returns>
@@ -106,7 +106,7 @@ namespace LAsOsuBeatmapParser.Beatmaps
         }
 
         /// <summary>
-        /// Gets the display title.
+        ///     Gets the display title.
         /// </summary>
         /// <param name="metadata">The metadata.</param>
         /// <returns>The display title.</returns>
@@ -116,7 +116,7 @@ namespace LAsOsuBeatmapParser.Beatmaps
         }
 
         /// <summary>
-        /// Gets the display title romanised.
+        ///     Gets the display title romanised.
         /// </summary>
         /// <param name="metadata">The metadata.</param>
         /// <returns>The display title romanised.</returns>

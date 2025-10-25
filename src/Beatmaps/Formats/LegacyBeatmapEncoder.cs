@@ -1,30 +1,22 @@
-using System;
 using System.IO;
-using System.Linq;
 using System.Text;
-using LAsOsuBeatmapParser.Beatmaps;
 
 namespace LAsOsuBeatmapParser.Beatmaps.Formats
 {
     /// <summary>
-    /// osu! .osu 文件编码器。
+    ///     osu! .osu 文件编码器。
     /// </summary>
     public class LegacyBeatmapEncoder
     {
         /// <summary>
-        /// 是否使用 lazer 版本格式 (v128)。
-        /// </summary>
-        public bool UseLazerVersion { get; set; }
-
-        /// <summary>
-        /// 创建 LegacyBeatmapEncoder。
+        ///     创建 LegacyBeatmapEncoder。
         /// </summary>
         public LegacyBeatmapEncoder()
         {
         }
 
         /// <summary>
-        /// 创建 LegacyBeatmapEncoder。
+        ///     创建 LegacyBeatmapEncoder。
         /// </summary>
         /// <param name="useLazerVersion">是否使用 lazer 版本格式。</param>
         public LegacyBeatmapEncoder(bool useLazerVersion)
@@ -33,7 +25,12 @@ namespace LAsOsuBeatmapParser.Beatmaps.Formats
         }
 
         /// <summary>
-        /// 将谱面编码为字符串。
+        ///     是否使用 lazer 版本格式 (v128)。
+        /// </summary>
+        public bool UseLazerVersion { get; set; }
+
+        /// <summary>
+        ///     将谱面编码为字符串。
         /// </summary>
         /// <param name="beatmap">谱面对象。</param>
         /// <returns>编码后的 .osu 格式字符串。</returns>
@@ -142,7 +139,7 @@ namespace LAsOsuBeatmapParser.Beatmaps.Formats
         }
 
         /// <summary>
-        /// 将谱面编码到流。
+        ///     将谱面编码到流。
         /// </summary>
         /// <param name="beatmap">谱面对象。</param>
         /// <param name="stream">目标流。</param>
@@ -153,7 +150,7 @@ namespace LAsOsuBeatmapParser.Beatmaps.Formats
         }
 
         /// <summary>
-        /// 将谱面编码到文件。
+        ///     将谱面编码到文件。
         /// </summary>
         /// <param name="beatmap">谱面对象。</param>
         /// <param name="filePath">目标文件路径。</param>

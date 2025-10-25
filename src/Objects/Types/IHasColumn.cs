@@ -3,12 +3,12 @@
 namespace LAsOsuBeatmapParser.Objects.Types
 {
     /// <summary>
-    /// A type of hit object which lies in one of a number of predetermined columns.
+    ///     A type of hit object which lies in one of a number of predetermined columns.
     /// </summary>
     public interface IHasColumn
     {
         /// <summary>
-        /// The column which the hit object lies in.
+        ///     The column which the hit object lies in.
         /// </summary>
         int Column { get; }
     }

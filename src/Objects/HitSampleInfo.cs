@@ -5,52 +5,53 @@ using System;
 namespace LAsOsuBeatmapParser.Objects
 {
     /// <summary>
-    /// Describes a gameplay hit sample.
+    ///     Describes a gameplay hit sample.
     /// </summary>
     public class HitSampleInfo : IEquatable<HitSampleInfo>
     {
-        public const string HIT_NORMAL = @"hitnormal";
+        public const string HIT_NORMAL  = @"hitnormal";
         public const string HIT_WHISTLE = @"hitwhistle";
-        public const string HIT_FINISH = @"hitfinish";
-        public const string HIT_CLAP = @"hitclap";
+        public const string HIT_FINISH  = @"hitfinish";
+        public const string HIT_CLAP    = @"hitclap";
+
+        public HitSampleInfo(string name, string bank = "normal", int volume = 100, bool isLayered = false, string? customSampleBank = null)
+        {
+            Name             = name;
+            Bank             = bank;
+            Volume           = volume;
+            IsLayered        = isLayered;
+            CustomSampleBank = customSampleBank;
+        }
 
         /// <summary>
-        /// The name of the sample to load.
+        ///     The name of the sample to load.
         /// </summary>
         public string Name { get; }
 
         /// <summary>
-        /// The bank to load the sample from.
+        ///     The bank to load the sample from.
         /// </summary>
         public string Bank { get; }
 
         /// <summary>
-        /// The volume of the sample.
+        ///     The volume of the sample.
         /// </summary>
         public int Volume { get; }
 
         /// <summary>
-        /// Whether this is a layered sample.
+        ///     Whether this is a layered sample.
         /// </summary>
         public bool IsLayered { get; }
 
         /// <summary>
-        /// The custom sample bank to use.
+        ///     The custom sample bank to use.
         /// </summary>
         public string? CustomSampleBank { get; }
-
-        public HitSampleInfo(string name, string bank = "normal", int volume = 100, bool isLayered = false, string? customSampleBank = null)
-        {
-            Name = name;
-            Bank = bank;
-            Volume = volume;
-            IsLayered = isLayered;
-            CustomSampleBank = customSampleBank;
-        }
 
         public bool Equals(HitSampleInfo? other)
         {
             if (other is null) return false;
+
             return Name == other.Name &&
                    Bank == other.Bank &&
                    Volume == other.Volume &&

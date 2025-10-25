@@ -7,12 +7,11 @@ using LAsOsuBeatmapParser.Beatmaps;
 namespace LAsOsuBeatmapParser.Converters
 {
     /// <summary>
-    /// 用于处理 List&lt;HitObject&gt; 多态的 JSON 转换器。
+    ///     用于处理 List&lt;HitObject&gt; 多态的 JSON 转换器。
     /// </summary>
     public class HitObjectListConverter : JsonConverter<List<HitObject>>
     {
         /// <summary>
-        ///
         /// </summary>
         /// <param name="reader"></param>
         /// <param name="typeToConvert"></param>
@@ -34,13 +33,13 @@ namespace LAsOsuBeatmapParser.Converters
                 if (reader.TokenType == JsonTokenType.StartObject)
                 {
                     // 读取对象以判断类型
-                    using JsonDocument doc = JsonDocument.ParseValue(ref reader);
-                    JsonElement root = doc.RootElement;
+                    using JsonDocument doc  = JsonDocument.ParseValue(ref reader);
+                    JsonElement        root = doc.RootElement;
 
                     if (root.TryGetProperty("Type", out JsonElement typeProp))
                     {
                         int typeInt = typeProp.GetInt32();
-                        var type = (HitObjectType)typeInt;
+                        var type    = (HitObjectType)typeInt;
 
                         HitObject? hitObject;
 
@@ -63,7 +62,6 @@ namespace LAsOsuBeatmapParser.Converters
         }
 
         /// <summary>
-        ///
         /// </summary>
         /// <param name="writer"></param>
         /// <param name="value"></param>

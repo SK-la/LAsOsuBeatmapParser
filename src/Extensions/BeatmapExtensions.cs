@@ -1,20 +1,18 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using LAsOsuBeatmapParser.Analysis;
 using LAsOsuBeatmapParser.Beatmaps;
-using LAsOsuBeatmapParser.Beatmaps.ControlPoints;
 using LAsOsuBeatmapParser.Exceptions;
 
 namespace LAsOsuBeatmapParser.Extensions
 {
     /// <summary>
-    /// Beatmap 的扩展方法。
+    ///     Beatmap 的扩展方法。
     /// </summary>
     public static class BeatmapExtensions
     {
         /// <summary>
-        /// 从 Beatmap 获取 ManiaBeatmap，并验证模式。
+        ///     从 Beatmap 获取 ManiaBeatmap，并验证模式。
         /// </summary>
         /// <typeparam name="T">HitObject类型。</typeparam>
         /// <param name="beatmap">谱面对象。</param>
@@ -23,10 +21,7 @@ namespace LAsOsuBeatmapParser.Extensions
         public static Beatmap<ManiaHitObject> GetManiaBeatmap<T>(this Beatmap<T> beatmap) where T : HitObject
         {
             // 如果已经是ManiaBeatmap，直接返回
-            if (typeof(T) == typeof(ManiaHitObject))
-            {
-                return (Beatmap<ManiaHitObject>)(object)beatmap;
-            }
+            if (typeof(T) == typeof(ManiaHitObject)) return (Beatmap<ManiaHitObject>)(object)beatmap;
 
             if (beatmap.Mode.Id != GameMode.Mania.Id) throw new InvalidModeException("Beatmap mode must be Mania.");
 
@@ -35,24 +30,24 @@ namespace LAsOsuBeatmapParser.Extensions
 
             var mania = new Beatmap<ManiaHitObject>
             {
-                BeatmapInfo = beatmap.BeatmapInfo,
+                BeatmapInfo      = beatmap.BeatmapInfo,
                 ControlPointInfo = beatmap.ControlPointInfo,
-                Breaks = beatmap.Breaks,
-                MetadataLegacy = beatmap.MetadataLegacy,
+                Breaks           = beatmap.Breaks,
+                MetadataLegacy   = beatmap.MetadataLegacy,
                 DifficultyLegacy = beatmap.DifficultyLegacy,
-                Mode = beatmap.Mode,
-                Version = beatmap.Version,
-                TimingPoints = beatmap.TimingPoints,
-                Events = beatmap.Events,
+                Mode             = beatmap.Mode,
+                Version          = beatmap.Version,
+                TimingPoints     = beatmap.TimingPoints,
+                Events           = beatmap.Events,
 
-                HitObjects = beatmap.HitObjects.Select(h => new ManiaHitObject(h.StartTime, 0, keyCount)).ToList(), // Convert HitObject to ManiaHitObject
+                HitObjects = beatmap.HitObjects.Select(h => new ManiaHitObject(h.StartTime, 0, keyCount)).ToList() // Convert HitObject to ManiaHitObject
             };
 
             return mania;
         }
 
         /// <summary>
-        /// 获取谱面的 BPM。
+        ///     获取谱面的 BPM。
         /// </summary>
         /// <param name="beatmap">谱面对象。</param>
         /// <returns>BPM 数值。</returns>
@@ -62,7 +57,7 @@ namespace LAsOsuBeatmapParser.Extensions
         }
 
         /// <summary>
-        /// 获取用于分析的时间-音符矩阵。
+        ///     获取用于分析的时间-音符矩阵。
         /// </summary>
         /// <param name="beatmap">谱面对象。</param>
         /// <returns>时间到音符列表的字典。</returns>
@@ -72,7 +67,7 @@ namespace LAsOsuBeatmapParser.Extensions
         }
 
         /// <summary>
-        /// 根据条件过滤音符。
+        ///     根据条件过滤音符。
         /// </summary>
         /// <param name="beatmap">谱面对象。</param>
         /// <param name="predicate">过滤条件。</param>
@@ -83,7 +78,7 @@ namespace LAsOsuBeatmapParser.Extensions
         }
 
         /// <summary>
-        /// 获取最大连击数。
+        ///     获取最大连击数。
         /// </summary>
         /// <param name="beatmap">谱面对象。</param>
         /// <returns>最大连击数。</returns>
@@ -93,7 +88,7 @@ namespace LAsOsuBeatmapParser.Extensions
         }
 
         /// <summary>
-        /// 获取可玩时长。
+        ///     获取可玩时长。
         /// </summary>
         /// <param name="beatmap">谱面对象。</param>
         /// <returns>时长（毫秒）。</returns>
@@ -103,10 +98,9 @@ namespace LAsOsuBeatmapParser.Extensions
                 return 0;
 
             double firstTime = beatmap.HitObjects.Min(h => h.StartTime);
-            double lastTime = beatmap.HitObjects.Max(h => h.EndTime);
+            double lastTime  = beatmap.HitObjects.Max(h => h.EndTime);
 
             return lastTime - firstTime;
         }
-
     }
 }

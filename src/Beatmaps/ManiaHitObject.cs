@@ -1,28 +1,58 @@
-using System;
 using System.Numerics;
-using LAsOsuBeatmapParser.Objects.Types;
 using LAsOsuBeatmapParser.Extensions;
+using LAsOsuBeatmapParser.Objects.Types;
 
 namespace LAsOsuBeatmapParser.Beatmaps
 {
     /// <summary>
-    /// Represents a hit object in Mania.
+    ///     Represents a hit object in Mania.
     /// </summary>
     public class ManiaHitObject : HitObject, IHasXPosition
     {
         /// <summary>
-        /// The column this hit object is in (0-based).
+        ///     Creates a new ManiaHitObject.
+        /// </summary>
+        public ManiaHitObject()
+        {
+        }
+
+        /// <summary>
+        ///     Creates a new ManiaHitObject with the specified time and column.
+        /// </summary>
+        /// <param name="startTime">The start time.</param>
+        /// <param name="column">The column.</param>
+        public ManiaHitObject(double startTime, int column)
+        {
+            StartTime = startTime;
+            Column    = column;
+        }
+
+        /// <summary>
+        ///     Creates a new ManiaHitObject with the specified time, column, and key count.
+        /// </summary>
+        /// <param name="startTime">The start time.</param>
+        /// <param name="column">The column.</param>
+        /// <param name="keyCount">The total number of keys.</param>
+        public ManiaHitObject(double startTime, int column, int keyCount)
+        {
+            StartTime = startTime;
+            Column    = column;
+            KeyCount  = keyCount;
+        }
+
+        /// <summary>
+        ///     The column this hit object is in (0-based).
         /// </summary>
         public int Column { get; set; }
 
         /// <summary>
-        /// The total number of keys (columns) in this mania beatmap.
+        ///     The total number of keys (columns) in this mania beatmap.
         /// </summary>
         public int KeyCount { get; set; }
 
         /// <summary>
-        /// For Mania, Position.X represents the normalized X coordinate from column.
-        /// Position.Y is always 192 (center of playfield).
+        ///     For Mania, Position.X represents the normalized X coordinate from column.
+        ///     Position.Y is always 192 (center of playfield).
         /// </summary>
         public override Vector2 Position
         {
@@ -31,7 +61,7 @@ namespace LAsOsuBeatmapParser.Beatmaps
         }
 
         /// <summary>
-        /// Implements IHasXPosition.X - returns the X coordinate.
+        ///     Implements IHasXPosition.X - returns the X coordinate.
         /// </summary>
         public float X
         {
@@ -40,46 +70,15 @@ namespace LAsOsuBeatmapParser.Beatmaps
         }
 
         /// <summary>
-        /// Creates a new ManiaHitObject.
-        /// </summary>
-        public ManiaHitObject()
-        {
-        }
-
-        /// <summary>
-        /// Creates a new ManiaHitObject with the specified time and column.
-        /// </summary>
-        /// <param name="startTime">The start time.</param>
-        /// <param name="column">The column.</param>
-        public ManiaHitObject(double startTime, int column)
-        {
-            StartTime = startTime;
-            Column = column;
-        }
-
-        /// <summary>
-        /// Creates a new ManiaHitObject with the specified time, column, and key count.
-        /// </summary>
-        /// <param name="startTime">The start time.</param>
-        /// <param name="column">The column.</param>
-        /// <param name="keyCount">The total number of keys.</param>
-        public ManiaHitObject(double startTime, int column, int keyCount)
-        {
-            StartTime = startTime;
-            Column = column;
-            KeyCount = keyCount;
-        }
-
-        /// <summary>
-        /// Returns a string representation of this hit object. 使用算法规范化坐标
+        ///     Returns a string representation of this hit object. 使用算法规范化坐标
         /// </summary>
         /// <returns>The string representation.</returns>
         public override string ToString()
         {
             // Mania hit objects: x,y,time,type,hitSound,hitSample
             // x is position, y is 192 for standard position
-            int x = (int)Position.X;
-            int y = (int)Position.Y;
+            int x    = (int)Position.X;
+            int y    = (int)Position.Y;
             int type = 1; // Normal hit
 
             // Ensure hit samples has a default value for mania
