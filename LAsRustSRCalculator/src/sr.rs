@@ -856,8 +856,11 @@ fn parse_hit_object(line: &str, circle_size: f64) -> Option<HitObject> {
     let start_time: i32 = parts[2].parse().ok()?;
     let obj_type: i32 = parts[3].parse().ok()?;
 
-    // For mania, calculate column from x using reverse of editor formula
-    let col = ((x * circle_size) / 512.0).floor() as i32;
+    // For mania, calculate column from x using the same formula as C#
+    let total_column = circle_size as i32;
+    let offset = 256.0 / total_column as f64;
+    let ratio = 512.0 / total_column as f64;
+    let col = ((x - offset) / ratio).round() as i32;
 
     // Check if it's a long note (bit 7 set in type)
     let is_long_note = (obj_type & 128) != 0;
@@ -928,8 +931,18 @@ pub extern "C" fn calculate_sr_from_osu_file(path_ptr: *const u8, len: usize) ->
     };
 
     let sr_data = match SRData::from_osu_file(path) {
-        Ok(data) => data,
-        Err(_) => return std::ptr::null_mut(),
+        Ok(data) => {
+            eprintln!("Rust parsed {} hit objects", data.hit_objects.len());
+            // Debug: print first few hit objects
+            for (i, ho) in data.hit_objects.iter().take(5).enumerate() {
+                eprintln!("Rust Note {}: col={}, start={}, end={}", i, ho.position.x as i32, ho.start_time, ho.end_time);
+            }
+            data
+        },
+        Err(e) => {
+            eprintln!("Rust parse error: {}", e);
+            return std::ptr::null_mut();
+        }
     };
 
     let beatmap = Beatmap {
