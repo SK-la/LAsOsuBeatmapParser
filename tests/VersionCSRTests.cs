@@ -103,7 +103,7 @@ namespace LAsOsuBeatmapParser.Tests
             foreach ((string version, double sr, long timeMs, long memoryBytes) in results)
             {
                 Assert.True(sr >= 0, $"SR值不能为负 ({version}): {sr}");
-                Assert.True(sr <= 100, $"SR值过高 ({version}): {sr}");
+                Assert.True(sr <= 10, $"SR值过高 ({version}): {sr}");
             }
 
             _output.WriteLine("✅ 单一文件不同版本测试完成");
@@ -164,7 +164,7 @@ namespace LAsOsuBeatmapParser.Tests
             foreach ((string fileName, string version, double sr, long timeMs, long memoryBytes) in results)
             {
                 Assert.True(sr >= 0, $"SR值不能为负 ({fileName} - {version}): {sr}");
-                Assert.True(sr <= 100, $"SR值过高 ({fileName} - {version}): {sr}");
+                Assert.True(sr <= 10, $"SR值过高 ({fileName} - {version}): {sr}");
             }
 
             // 计算统计信息

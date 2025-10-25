@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using Xunit;
 using System.IO;
 using System.Text;
@@ -415,42 +416,34 @@ ApproachRate:5
         }
 
         [Fact]
-        public void PerformanceTest_PrecomputationOptimization()
+        public void GetStatistics_ReturnsValidStatistics()
         {
-            // Arrange
-            string testFile = Path.Combine("Resource", "Jumpstream - Happy Hardcore Synthesizer (SK_la) [10k-1].osu");
+            // 获取 tests 目录的绝对路径
+            string? testDir = Path.GetDirectoryName(typeof(BeatmapDecoderTests).Assembly.Location);
+
+            // 向上查找直到找到 Resource 目录
+            while (testDir != null && !Directory.Exists(Path.Combine(testDir, "Resource")))
+            {
+                DirectoryInfo? parent = Directory.GetParent(testDir);
+                testDir = parent?.FullName;
+            }
+
+            string testFile = Path.Combine(testDir ?? "", "Resource", "Jumpstream - Happy Hardcore Synthesizer (SK_la) [10k-1].osu");
             var decoder = new LegacyBeatmapDecoder();
 
-            // Act - Test with precomputation disabled
-            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
-            Beatmap beatmapNoPrecompute = decoder.Decode(testFile);
-            stopwatch.Stop();
-            long timeNoPrecompute = stopwatch.ElapsedMilliseconds;
+            // Act
+            Beatmap beatmap = decoder.Decode(testFile);
+            var statistics = beatmap.GetStatistics().ToList();
 
-            // Assert - Verify no SR data is created when disabled
-            Assert.Null(beatmapNoPrecompute.AnalysisData.SRsNotes);
-            Assert.Null(beatmapNoPrecompute.AnalysisData.KeyDistribution);
-
-            // Act - Test with precomputation enabled
-            stopwatch.Restart();
-            Beatmap beatmapWithPrecompute = decoder.Decode(testFile);
-            stopwatch.Stop();
-            long timeWithPrecompute = stopwatch.ElapsedMilliseconds;
-
-            // Assert - Verify SR data is created when enabled
-            Assert.NotNull(beatmapWithPrecompute.AnalysisData.SRsNotes);
-            Assert.NotNull(beatmapWithPrecompute.AnalysisData.KeyDistribution);
-            Assert.Equal(beatmapWithPrecompute.HitObjects.Count, beatmapWithPrecompute.AnalysisData.SRsNotes.Length);
-
-            // Log performance results
-            _testOutputHelper.WriteLine($"Parse time without precompute: {timeNoPrecompute}ms");
-            _testOutputHelper.WriteLine($"Parse time with precompute: {timeWithPrecompute}ms");
-            _testOutputHelper.WriteLine($"SR notes created: {beatmapWithPrecompute.AnalysisData.SRsNotes.Length}");
-
-            // The optimization should show some performance benefit (allowing some variance)
-            // Note: This is a basic check - real performance testing would need more sophisticated benchmarking
-            Assert.True(timeWithPrecompute >= timeNoPrecompute || timeWithPrecompute <= timeNoPrecompute * 1.5,
-                        "Precomputation should not significantly degrade performance");
+            // Assert
+            Assert.NotNull(statistics);
+            Assert.Single(statistics);
+            var stat = statistics[0];
+            Assert.Equal("Hit Objects", stat.Name);
+            Assert.Equal(beatmap.HitObjects.Count.ToString(), stat.Content);
+            Assert.True(stat.TotalNotes > 0);
+            Assert.True(stat.TotalDuration > 0);
+            Assert.True(stat.SR >= 0);
         }
     }
 }

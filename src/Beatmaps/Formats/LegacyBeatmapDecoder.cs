@@ -16,24 +16,10 @@ namespace LAsOsuBeatmapParser.Beatmaps.Formats
     public class LegacyBeatmapDecoder
     {
         /// <summary>
-        /// 是否在解析时预计算分析数据。默认为 true。
-        /// </summary>
-        public bool EnableAnalysisDataPrecomputation { get; set; } = true;
-
-        /// <summary>
         /// 创建 LegacyBeatmapDecoder。
         /// </summary>
         public LegacyBeatmapDecoder()
         {
-        }
-
-        /// <summary>
-        /// 创建 LegacyBeatmapDecoder，并指定是否预计算分析数据。
-        /// </summary>
-        /// <param name="enableAnalysisDataPrecomputation">是否预计算分析数据。</param>
-        public LegacyBeatmapDecoder(bool enableAnalysisDataPrecomputation)
-        {
-            EnableAnalysisDataPrecomputation = enableAnalysisDataPrecomputation;
         }
 
         /// <summary>
@@ -102,9 +88,6 @@ namespace LAsOsuBeatmapParser.Beatmaps.Formats
         {
             var beatmap = new Beatmap();
             string currentSection = "";
-
-            // 设置预计算标志为 false，因为现在使用扩展方法获取分析数据
-            beatmap.IsAnalysisDataPrecomputationEnabled = false;
 
             while (reader.ReadLine() is { } line)
             {

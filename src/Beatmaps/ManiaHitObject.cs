@@ -25,7 +25,7 @@ namespace LAsOsuBeatmapParser.Beatmaps
         /// </summary>
         public new (float X, float Y) Position
         {
-            get => (ManiaExtensions.GetPositionX(KeyCount, Column + 1), 192f);
+            get => (ManiaExtensions.GetPositionX(KeyCount, Column), 192f);
             set
             {
                 // When setting position, convert back to column
@@ -83,7 +83,7 @@ namespace LAsOsuBeatmapParser.Beatmaps
             // Mania hit objects: x,y,time,type,hitSound,hitSample
             // x is position, y is 192 for standard position
             // Use new formula
-            int x = ManiaExtensions.GetPositionX(KeyCount, Column + 1);
+            int x = ManiaExtensions.GetPositionX(KeyCount, Column);
             int y = 192; // Standard y position for mania
             int type = 1; // Normal hit
 

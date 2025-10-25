@@ -108,7 +108,7 @@ namespace LAsOsuBeatmapParser.Tests
             foreach ((string algorithm, double sr, long timeMs, long memoryBytes) in results)
             {
                 Assert.True(sr >= 0, $"SR值不能为负 ({algorithm}): {sr}");
-                Assert.True(sr <= 100, $"SR值过高 ({algorithm}): {sr}");
+                Assert.True(sr <= 10, $"SR值过高 ({algorithm}): {sr}");
             }
 
             _output.WriteLine("✅ 单一文件对比测试完成");
@@ -130,7 +130,7 @@ namespace LAsOsuBeatmapParser.Tests
             GC.Collect();
             GC.WaitForPendingFinalizers();
 
-            var results = new List<(string fileName, string algorithm, double sr, long timeMs, long memoryBytes)>();
+            var results = new List<(double cs, string algorithm, double sr, long timeMs, long memoryBytes)>();
 
             // 定义所有算法
             var algorithms = new (string name, Func<Beatmap, string, double> calculator)[]
@@ -161,7 +161,7 @@ namespace LAsOsuBeatmapParser.Tests
                     long finalMemory = GC.GetAllocatedBytesForCurrentThread();
                     long memoryUsed = finalMemory - initialMemory;
 
-                    results.Add((fileName, algorithmName, sr, stopwatch.ElapsedMilliseconds, memoryUsed));
+                    results.Add((beatmap.BeatmapInfo.Difficulty.CircleSize, algorithmName, sr, stopwatch.ElapsedMilliseconds, memoryUsed));
 
                     // 计算间隔延迟
                     System.Threading.Thread.Sleep(10);
@@ -169,14 +169,14 @@ namespace LAsOsuBeatmapParser.Tests
             }
 
             // Assert - 验证结果合理性
-            foreach ((string fileName, string algorithm, double sr, long timeMs, long memoryBytes) in results)
+            foreach ((double cs, string algorithm, double sr, long timeMs, long memoryBytes) in results)
             {
-                Assert.True(sr >= 0, $"SR值不能为负 ({fileName} - {algorithm}): {sr}");
-                Assert.True(sr <= 100, $"SR值过高 ({fileName} - {algorithm}): {sr}");
+                Assert.True(sr >= 0, $"SR值不能为负 (CS{cs} - {algorithm}): {sr}");
+                Assert.True(sr <= 10, $"SR值过高 (CS{cs} - {algorithm}): {sr}");
             }
 
             // 计算统计信息
-            IEnumerable<IGrouping<string, (string fileName, string algorithm, double sr, long timeMs, long memoryBytes)>> algorithmGroups = results.GroupBy(r => r.algorithm);
+            IEnumerable<IGrouping<string, (double cs, string algorithm, double sr, long timeMs, long memoryBytes)>> algorithmGroups = results.GroupBy(r => r.algorithm);
 
             foreach (IGrouping<string, (string fileName, string algorithm, double sr, long timeMs, long memoryBytes)> group in algorithmGroups)
             {
@@ -203,7 +203,7 @@ namespace LAsOsuBeatmapParser.Tests
             Beatmap beatmap = decoder.Decode(ComparisonTestFile);
 
             _output.WriteLine($"=== C#+Rust SR算法对比 - encoded_output.osu测试 ===");
-            _output.WriteLine($"测试文件: {Path.GetFileName(ComparisonTestFile)}");
+            _output.WriteLine($"CS值: {beatmap.BeatmapInfo.Difficulty.CircleSize}");
             _output.WriteLine($"谱面信息: {beatmap.BeatmapInfo.Metadata.Artist} - {beatmap.BeatmapInfo.Metadata.Title} [{beatmap.BeatmapInfo.Metadata.Version}]");
             _output.WriteLine($"键数: {(int)beatmap.BeatmapInfo.Difficulty.CircleSize}k");
             _output.WriteLine("");
@@ -255,7 +255,7 @@ namespace LAsOsuBeatmapParser.Tests
             foreach ((string algorithm, double sr, long timeMs, long memoryBytes) in results)
             {
                 Assert.True(sr >= 0, $"SR值不能为负 ({algorithm}): {sr}");
-                Assert.True(sr <= 100, $"SR值过高 ({algorithm}): {sr}");
+                Assert.True(sr <= 10, $"SR值过高 ({algorithm}): {sr}");
             }
 
             _output.WriteLine("✅ encoded_output.osu对比测试完成");

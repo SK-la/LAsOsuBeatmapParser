@@ -51,7 +51,7 @@ namespace LAsOsuBeatmapParser.Tests
             Beatmap beatmap = decoder.Decode(SingleTestFile);
 
             _output.WriteLine($"=== 生产环境C# SR算法 - 单一文件循环3次测试 ===");
-            _output.WriteLine($"测试文件: {Path.GetFileName(SingleTestFile)}");
+            _output.WriteLine($"CS值: {beatmap.BeatmapInfo.Difficulty.CircleSize}");
             _output.WriteLine($"谱面信息: {beatmap.BeatmapInfo.Metadata.Artist} - {beatmap.BeatmapInfo.Metadata.Title} [{beatmap.BeatmapInfo.Metadata.Version}]");
             _output.WriteLine($"键数: {(int)beatmap.BeatmapInfo.Difficulty.CircleSize}k");
             _output.WriteLine("");
@@ -93,7 +93,7 @@ namespace LAsOsuBeatmapParser.Tests
             foreach ((double sr, long timeMs, long memoryBytes) in results)
             {
                 Assert.True(sr >= 0, $"SR值不能为负: {sr}");
-                Assert.True(sr <= 100, $"SR值过高: {sr}");
+                Assert.True(sr <= 10, $"SR值过高: {sr}");
             }
 
             // 计算平均值
@@ -145,7 +145,7 @@ namespace LAsOsuBeatmapParser.Tests
 
                 results.Add((fileName, sr, stopwatch.ElapsedMilliseconds, memoryUsed));
 
-                _output.WriteLine($"{fileName}:");
+                _output.WriteLine($"CS {beatmap.BeatmapInfo.Difficulty.CircleSize}:");
                 _output.WriteLine($"  SR: {sr:F4}");
                 _output.WriteLine($"  时间: {stopwatch.ElapsedMilliseconds}ms");
                 _output.WriteLine($"  内存使用: {memoryUsed} bytes ({memoryUsed / (1024.0 * 1024.0):F2} MB)");
@@ -159,7 +159,7 @@ namespace LAsOsuBeatmapParser.Tests
             foreach ((string fileName, double sr, long timeMs, long memoryBytes) in results)
             {
                 Assert.True(sr >= 0, $"SR值不能为负 ({fileName}): {sr}");
-                Assert.True(sr <= 100, $"SR值过高 ({fileName}): {sr}");
+                Assert.True(sr <= 10, $"SR值过高 ({fileName}): {sr}");
             }
 
             // 计算统计信息

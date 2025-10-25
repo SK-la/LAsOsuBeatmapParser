@@ -15,8 +15,8 @@ namespace LAsOsuBeatmapParser.Extensions
         /// <returns>x坐标。</returns>
         public static int GetPositionX(int totalColumn, int index)
         {
-            // 拟合公式，结果四舍五入，和编辑器结果基本一致
-            double result = (index - 1) * 512.0 / totalColumn + 256.0 / totalColumn;
+            // 修正公式：index从0开始
+            double result = index * 512.0 / totalColumn + 256.0 / totalColumn;
             return (int)Math.Round(result);
         }
 
@@ -28,11 +28,11 @@ namespace LAsOsuBeatmapParser.Extensions
         /// <returns>列号（0-based）。</returns>
         public static int GetColumnFromX(int totalColumn, float x)
         {
-            // 逆运算：index = round((x - 256.0 / totalColumn) / (512.0 / totalColumn) + 1)
+            // 修正逆运算：直接计算，不需要额外的+1和-1
             double offset = 256.0 / totalColumn;
             double ratio = 512.0 / totalColumn;
-            double result = (x - offset) / ratio + 1;
-            return (int)Math.Round(result) - 1; // 转换为0-based
+            double result = (x - offset) / ratio;
+            return (int)Math.Round(result);
         }
     }
 }

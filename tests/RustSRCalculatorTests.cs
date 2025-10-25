@@ -168,17 +168,21 @@ namespace LAsOsuBeatmapParser.Tests
             // Arrange
             Assert.NotEmpty(TestFiles);
 
-            var results = new List<(string FileName, double? Sr, long TimeMs)>();
+            var decoder = new LegacyBeatmapDecoder();
+
+            var results = new List<(double Cs, double? Sr, long TimeMs)>();
 
             // Act
             foreach (string filePath in TestFiles)
             {
+                Beatmap beatmap = decoder.Decode(filePath);
+                double cs = beatmap.BeatmapInfo.Difficulty.CircleSize;
+
                 var stopwatch = Stopwatch.StartNew();
                 double? sr = SRCalculatorRust.CalculateSR_FromFile(filePath);
                 stopwatch.Stop();
 
-                string fileName = Path.GetFileName(filePath);
-                results.Add((fileName, sr, stopwatch.ElapsedMilliseconds));
+                results.Add((cs, sr, stopwatch.ElapsedMilliseconds));
 
                 Assert.NotNull(sr);
                 Assert.True(sr > 0);
@@ -186,10 +190,10 @@ namespace LAsOsuBeatmapParser.Tests
 
             // Output results
             _output.WriteLine("Rust SR Performance Results:");
-            _output.WriteLine("File Name | SR | Time (ms)");
-            _output.WriteLine("----------|-----|----------");
+            _output.WriteLine("CS | SR | Time (ms)");
+            _output.WriteLine("---|-----|----------");
 
-            foreach ((string fileName, double? sr, long timeMs) in results) _output.WriteLine($"{fileName,-40} | {sr:F4} | {timeMs,8}");
+            foreach ((double cs, double? sr, long timeMs) in results) _output.WriteLine($"{cs,-3:F1} | {sr:F4} | {timeMs,8}");
 
             double avgSr = results.Average(r => r.Sr ?? 0);
             double avgTime = results.Average(r => r.TimeMs);

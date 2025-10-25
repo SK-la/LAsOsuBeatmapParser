@@ -52,12 +52,12 @@ namespace LAsOsuBeatmapParser.Beatmaps
         /// </summary>
         public new (float X, float Y) Position
         {
-            get => (Column * (512f / KeyCount), 192f);
+            get => ((Column + 0.5f) * (512f / KeyCount), 192f);
             set
             {
                 // When setting position, convert back to column
                 if (KeyCount > 0)
-                    Column = (int)Math.Round(value.X / (512f / KeyCount));
+                    Column = (int)Math.Round((value.X / (512f / KeyCount)) - 0.5f);
             }
         }
 
@@ -72,7 +72,7 @@ namespace LAsOsuBeatmapParser.Beatmaps
             const int totalWidth = 512;
             int keyCount = KeyCount > 0 ? KeyCount : 4; // Default to 4 if not set
             float ratio = totalWidth / (float)keyCount;
-            int x = (int)Math.Ceiling(Column * ratio);
+            int x = (int)Math.Round((Column + 0.5f) * ratio);
             int y = 192; // Standard y position
             int type = 128; // Hold note type
 
