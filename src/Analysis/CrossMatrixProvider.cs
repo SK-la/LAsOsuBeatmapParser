@@ -18,32 +18,7 @@ namespace LAsOsuBeatmapParser.Analysis
             if (K < 1 || K > CrossMatrices.Length)
                 throw new ArgumentOutOfRangeException(nameof(K), $"不支持的键数: {K}，支持范围: 1-{CrossMatrices.Length}");
 
-            return CrossMatrices[K - 1];
-        }
-
-        /// <summary>
-        /// 检查指定的键数是否受支持
-        /// </summary>
-        /// <param name="K">键数</param>
-        /// <returns>是否受支持</returns>
-        public static bool IsSupported(int K)
-        {
-            return K >= 1 && K <= CrossMatrices.Length && CrossMatrices[K - 1] != null;
-        }
-
-        /// <summary>
-        /// 获取所有支持的键数
-        /// </summary>
-        /// <returns>支持的键数数组</returns>
-        public static int[] GetSupportedKeys()
-        {
-            var supported = new System.Collections.Generic.List<int>();
-            for (int i = 0; i < CrossMatrices.Length; i++)
-            {
-                if (CrossMatrices[i] != null)
-                    supported.Add(i + 1);
-            }
-            return supported.ToArray();
+            return CrossMatrices[K];
         }
 
         /// <summary>
@@ -53,42 +28,26 @@ namespace LAsOsuBeatmapParser.Analysis
         /// </summary>
         private static readonly double[][] CrossMatrices =
         [
-            // K=1
+            [-1],
             [0.075, 0.075],
-            // K=2
             [0.125, 0.05, 0.125],
-            // K=3
             [0.125, 0.125, 0.125, 0.125],
-            // K=4
             [0.175, 0.25, 0.05, 0.25, 0.175],
-            // K=5
             [0.175, 0.25, 0.175, 0.175, 0.25, 0.175],
-            // K=6
             [0.225, 0.35, 0.25, 0.05, 0.25, 0.35, 0.225],
-            // K=7
             [0.225, 0.35, 0.25, 0.225, 0.225, 0.25, 0.35, 0.225],
-            // K=8
             [0.275, 0.45, 0.35, 0.25, 0.05, 0.25, 0.35, 0.45, 0.275],
-            // K=9
             [0.275, 0.45, 0.35, 0.25, 0.275, 0.275, 0.25, 0.35, 0.45, 0.275],
-            // K=10
             [0.625, 0.55, 0.45, 0.35, 0.25, 0.05, 0.25, 0.35, 0.45, 0.55, 0.625],
-            // K=11 (odd, unsupported)
-            null,
-            // K=12
-            [0.8, 0.8, 0.8, 0.6, 0.4, 0.2, 0.05, 0.2, 0.4, 0.6, 0.8, 0.8, 0.8],
-            // K=13 (odd, unsupported)
-            null,
-            // K=14
-            [0.4, 0.4, 0.2, 0.2, 0.3, 0.3, 0.1, 0.1, 0.3, 0.3, 0.2, 0.2, 0.4, 0.4, 0.4],
-            // K=15 (odd, unsupported)
-            null,
-            // K=16
-            [0.4, 0.4, 0.2, 0.2, 0.4, 0.4, 0.2, 0.1, 0.1, 0.2, 0.4, 0.4, 0.2, 0.2, 0.4, 0.4, 0.4],
-            // K=17 (odd, unsupported)
-            null,
-            // K=18
-            [0.4, 0.4, 0.2, 0.4, 0.2, 0.4, 0.2, 0.3, 0.1, 0.1, 0.3, 0.2, 0.4, 0.2, 0.4, 0.2, 0.4, 0.4, 0.4]
+            // Inferred matrices for K=11 to 18 based on user-specified patterns
+            [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1], // K=11 (odd, unsupported)
+            [0.8, 0.8, 0.8, 0.6, 0.4, 0.2, 0.05, 0.2, 0.4, 0.6, 0.8, 0.8, 0.8], // K=12 (even, sides 3 columns higher)
+            [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1], // K=13 (odd, unsupported)
+            [0.4, 0.4, 0.2, 0.2, 0.3, 0.3, 0.1, 0.1, 0.3, 0.3, 0.2, 0.2, 0.4, 0.4, 0.4], // K=14 (wave: low-low-high-high-low-low-high-high)
+            [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1], // K=15 (odd, unsupported)
+            [0.4, 0.4, 0.2, 0.2, 0.4, 0.4, 0.2, 0.1, 0.1, 0.2, 0.4, 0.4, 0.2, 0.2, 0.4, 0.4, 0.4], // K=16 (wave: low-low-high-high-low-low-high-high-low-low-high-high)
+            [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1], // K=17 (odd, unsupported)
+            [0.4, 0.4, 0.2, 0.4, 0.2, 0.4, 0.2, 0.3, 0.1, 0.1, 0.3, 0.2, 0.4, 0.2, 0.4, 0.2, 0.4, 0.4, 0.4] // K=18 (wave: low-low-high-low-high-low-high-low-low-high-low-high-low-high)
         ];
     }
 }

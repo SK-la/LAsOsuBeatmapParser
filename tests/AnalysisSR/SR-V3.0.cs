@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging;
 using LAsOsuBeatmapParser.Beatmaps;
 using LAsOsuBeatmapParser.Beatmaps.Formats;
 using LAsOsuBeatmapParser.Analysis;
+using LAsOsuBeatmapParser.Extensions;
 
 namespace LAsOsuBeatmapParser.Tests.AnalysisSR
 {
@@ -86,11 +87,11 @@ namespace LAsOsuBeatmapParser.Tests.AnalysisSR
         public async Task<(double sr, Dictionary<string, long> times)> CalculateSRAsync(Beatmap beatmap)
         {
             double od = beatmap.Difficulty.OverallDifficulty;
-            int K = (int)beatmap.Difficulty.CircleSize;
+            int keyCount = (int)beatmap.Difficulty.CircleSize;
             var times = new Dictionary<string, long>();
 
             // Check if key count is supported (max 18 keys, even numbers only for K>10)
-            if (K > 18 || K < 1 || (K > 10 && K % 2 == 1)) return (-1, times); // Return invalid SR
+            if (keyCount > 18 || keyCount < 1 || (keyCount > 10 && keyCount % 2 == 1)) return (-1, times); // Return invalid SR
 
             try
             {
@@ -99,9 +100,9 @@ namespace LAsOsuBeatmapParser.Tests.AnalysisSR
 
                 foreach (HitObject? hitObject in beatmap.HitObjects)
                 {
-                    int col = (int)Math.Floor(hitObject.Position.X * K / 512.0);
+                    int col = hitObject is ManiaHitObject maniaHit ? maniaHit.Column : ManiaExtensions.GetColumnFromX(keyCount, hitObject.Position.X);
                     int time = (int)hitObject.StartTime;
-                    int tail = (int)hitObject.EndTime > (int)hitObject.StartTime ? (int)hitObject.EndTime : -1;
+                    int tail = hitObject.EndTime > hitObject.StartTime ? (int)hitObject.EndTime : -1;
                     noteSequence.Add(new SRsNote(col, time, tail));
                 }
 
@@ -167,7 +168,7 @@ namespace LAsOsuBeatmapParser.Tests.AnalysisSR
                     try
                     {
                         var sectionStopwatch = Stopwatch.StartNew();
-                        (double[] jBar, double[][] deltaKsResult) = CalculateSection23(K, noteSeqByColumn, T, x);
+                        (double[] jBar, double[][] deltaKsResult) = CalculateSection23(keyCount, noteSeqByColumn, T, x);
                         sectionStopwatch.Stop();
                         return (jBar, deltaKsResult);
                     }
@@ -183,7 +184,7 @@ namespace LAsOsuBeatmapParser.Tests.AnalysisSR
                     try
                     {
                         var sectionStopwatch = Stopwatch.StartNew();
-                        double[] XBar = CalculateSection24(K, T, noteSeqByColumn, x);
+                        double[] XBar = CalculateSection24(keyCount, T, noteSeqByColumn, x);
                         sectionStopwatch.Stop();
                         return XBar;
                     }
@@ -227,7 +228,7 @@ namespace LAsOsuBeatmapParser.Tests.AnalysisSR
                 {
                     try
                     {
-                        return CalculateSection26(deltaKs, K, T, noteSeq);
+                        return CalculateSection26(deltaKs, keyCount, T, noteSeq);
                     }
                     catch (Exception ex)
                     {
@@ -261,7 +262,7 @@ namespace LAsOsuBeatmapParser.Tests.AnalysisSR
 
                 // Final calculation
                 stopwatch.Restart();
-                double result = CalculateSection3(JBar, XBar, PBar, ABar, RBar, KS, T, noteSeq, LNSeq, K);
+                double result = CalculateSection3(JBar, XBar, PBar, ABar, RBar, KS, T, noteSeq, LNSeq, keyCount);
                 stopwatch.Stop();
                 // Logger.WriteLine(LogLevel.Debug, $"[SRCalculator]Section 3 Time: {stopwatch.ElapsedMilliseconds}ms");
                 times["Section3"] = stopwatch.ElapsedMilliseconds;

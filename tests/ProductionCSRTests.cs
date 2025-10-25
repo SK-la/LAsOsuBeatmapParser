@@ -30,11 +30,11 @@ namespace LAsOsuBeatmapParser.Tests
 
         private static readonly string SingleTestFile = Path.Combine(
             TestResourceDir,
-            "Jumpstream - Happy Hardcore Synthesizer (SK_la) [10k-1].osu"
+            "Glen Check - 60's Cardin (SK_la) [Insane].osu"
         );
 
         private static readonly string[] MultipleTestFiles = Directory.GetFiles(TestResourceDir, "*.osu")
-                                                                      .Where(f => !f.Contains("SUPERMUG") && !f.Contains("encoded_output"))
+                                                                      .Where(f => !f.Contains("encoded_output"))
                                                                       .ToArray();
 
         public ProductionCSRTests(ITestOutputHelper output)

@@ -18,32 +18,34 @@ namespace LAsOsuBeatmapParser.Extensions
         /// </summary>
         /// <typeparam name="T">HitObject类型。</typeparam>
         /// <param name="beatmap">谱面对象。</param>
-        /// <returns>ManiaBeatmap 对象。</returns>
+        /// <returns>Beatmap<ManiaHitObject> 对象。</returns>
         /// <exception cref="InvalidModeException">如果模式不是 Mania 则抛出异常。</exception>
-        public static ManiaBeatmap GetManiaBeatmap<T>(this Beatmap<T> beatmap) where T : HitObject
+        public static Beatmap<ManiaHitObject> GetManiaBeatmap<T>(this Beatmap<T> beatmap) where T : HitObject
         {
             // 如果已经是ManiaBeatmap，直接返回
-            if (typeof(T) == typeof(ManiaHitObject) && beatmap is ManiaBeatmap maniaBeatmap)
+            if (typeof(T) == typeof(ManiaHitObject))
             {
-                maniaBeatmap.ValidateMode();
-                return maniaBeatmap;
+                return (Beatmap<ManiaHitObject>)(object)beatmap;
             }
 
             if (beatmap.Mode.Id != GameMode.Mania.Id) throw new InvalidModeException("Beatmap mode must be Mania.");
 
-            var mania = new ManiaBeatmap
+            // Set current key count for ManiaHitObject position calculations
+            int keyCount = (int)beatmap.Difficulty.CircleSize;
+
+            var mania = new Beatmap<ManiaHitObject>
             {
                 BeatmapInfo = beatmap.BeatmapInfo,
                 ControlPointInfo = beatmap.ControlPointInfo,
                 Breaks = beatmap.Breaks,
                 MetadataLegacy = beatmap.MetadataLegacy,
                 DifficultyLegacy = beatmap.DifficultyLegacy,
-                TimingPoints = beatmap.TimingPoints,
-                HitObjects = beatmap.HitObjects.Select(h => new ManiaHitObject(h.StartTime, 0, (int)beatmap.Difficulty.CircleSize)).ToList(), // Convert HitObject to ManiaHitObject
-                Events = beatmap.Events,
                 Mode = beatmap.Mode,
                 Version = beatmap.Version,
-                TotalColumns = (int)beatmap.Difficulty.CircleSize
+                TimingPoints = beatmap.TimingPoints,
+                Events = beatmap.Events,
+
+                HitObjects = beatmap.HitObjects.Select(h => new ManiaHitObject(h.StartTime, 0, keyCount)).ToList(), // Convert HitObject to ManiaHitObject
             };
 
             return mania;

@@ -435,7 +435,7 @@ namespace LAsOsuBeatmapParser.Beatmaps.Formats
                 hitCircle.StartTime = startTime;
 
             if (float.TryParse(parts[0], out float x) && float.TryParse(parts[1], out float y))
-                hitCircle.Position = (x, y);
+                hitCircle.Position = new System.Numerics.Vector2(x, y);
 
             if (parts.Length > 4 && int.TryParse(parts[4], out int hitsound))
                 hitCircle.Hitsound = hitsound;
@@ -457,7 +457,7 @@ namespace LAsOsuBeatmapParser.Beatmaps.Formats
                 slider.StartTime = startTime;
 
             if (float.TryParse(parts[0], out float x) && float.TryParse(parts[1], out float y))
-                slider.Position = (X: x, Y: y);
+                slider.Position = new System.Numerics.Vector2(x, y);
 
             if (parts.Length > 5)
             {
@@ -501,7 +501,7 @@ namespace LAsOsuBeatmapParser.Beatmaps.Formats
                 spinner.StartTime = startTime;
 
             if (float.TryParse(parts[0], out float x) && float.TryParse(parts[1], out float y))
-                spinner.Position = (X: x, Y: y);
+                spinner.Position = new System.Numerics.Vector2(x, y);
 
             if (parts.Length > 5 && double.TryParse(parts[5], out double endTime))
                 spinner.EndTime = endTime;
@@ -554,18 +554,15 @@ namespace LAsOsuBeatmapParser.Beatmaps.Formats
             if (double.TryParse(parts[2], out double startTime))
                 maniaHit.StartTime = startTime;
 
-            // 解析 x, y 位置
-            if (float.TryParse(parts[0], out float x) && float.TryParse(parts[1], out float y)) maniaHit.Position = (x, y);
+            // Set key count
+            int keyCount = (int)beatmap.Difficulty.CircleSize;
+            maniaHit.KeyCount = keyCount;
 
-            // 根据 x 位置和键数计算列索引（用于兼容性）
-            if (float.TryParse(parts[0], out float xPos))
+            // Parse x, y position
+            if (float.TryParse(parts[0], out float x) && float.TryParse(parts[1], out float y))
             {
-                int keyCount = (int)beatmap.Difficulty.CircleSize;
-
-                // 使用新的坐标转换公式
-                maniaHit.Column = ManiaExtensions.GetColumnFromX(keyCount, xPos);
-
-                maniaHit.KeyCount = keyCount;
+                // Set position, which will normalize and set column
+                maniaHit.Position = new System.Numerics.Vector2(x, 192f);
             }
 
             if (parts.Length > 4 && int.TryParse(parts[4], out int hitsound))

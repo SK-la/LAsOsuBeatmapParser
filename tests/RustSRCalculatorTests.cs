@@ -27,12 +27,10 @@ namespace LAsOsuBeatmapParser.Tests
 
         private static readonly string SingleTestFile = Path.Combine(
             TestResourceDir,
-            "Jumpstream - Happy Hardcore Synthesizer (SK_la) [10k-1].osu"
+            "Glen Check - 60's Cardin (SK_la) [Insane].osu"
         );
 
-        private static readonly string[] TestFiles = Directory.GetFiles(TestResourceDir, "*.osu")
-                                                              .Where(f => !f.Contains("SUPERMUG"))
-                                                              .ToArray();
+        private static readonly string[] TestFiles = Directory.GetFiles(TestResourceDir, "*.osu");
 
         public RustSRCalculatorTests(ITestOutputHelper output)
         {
@@ -138,6 +136,7 @@ namespace LAsOsuBeatmapParser.Tests
             // Act
             double? sr = SRCalculatorRust.CalculateSR_FromFile(SingleTestFile);
             double? srContent = SRCalculatorRust.CalculateSR_FromContent(content);
+            SRCalculatorRust.CalculateSR(SingleTestFile);
             double? srJson = SRCalculatorRust.CalculateSR_FromJson(json);
             double srStruct = SRCalculatorRust.CalculateSR_FromStruct(structData);
 
@@ -152,14 +151,15 @@ namespace LAsOsuBeatmapParser.Tests
 
             // Check consistency (allow small differences)
             double baseSr = sr.Value;
-            Assert.True(Math.Abs(srContent.Value - baseSr) < 0.01, $"Content SR differs: {srContent} vs {baseSr}");
-            Assert.True(Math.Abs(srJson.Value - baseSr) < 0.01, $"JSON SR differs: {srJson} vs {baseSr}");
-            Assert.True(Math.Abs(srStruct - baseSr) < 0.01, $"Struct SR differs: {srStruct} vs {baseSr}");
 
             _output.WriteLine($"File SR: {sr:F4}");
             _output.WriteLine($"Content SR: {srContent:F4}");
             _output.WriteLine($"JSON SR: {srJson:F4}");
             _output.WriteLine($"Struct SR: {srStruct:F4}");
+
+            Assert.True(Math.Abs(srContent.Value - baseSr) < 0.01, $"Content SR differs: {srContent} vs {baseSr}");
+            Assert.True(Math.Abs(srJson.Value - baseSr) < 0.01, $"JSON SR differs: {srJson} vs {baseSr}");
+            Assert.True(Math.Abs(srStruct - baseSr) < 0.01, $"Struct SR differs: {srStruct} vs {baseSr}");
         }
 
         [Fact]
@@ -218,7 +218,7 @@ namespace LAsOsuBeatmapParser.Tests
             _testFilePath = Path.Combine(
                 AppDomain.CurrentDomain.BaseDirectory,
                 "..", "..", "..", "..", "tests", "Resource",
-                "Jumpstream - Happy Hardcore Synthesizer (SK_la) [10k-1].osu"
+                "Glen Check - 60's Cardin (SK_la) [Insane].osu"
             );
 
             if (!File.Exists(_testFilePath))

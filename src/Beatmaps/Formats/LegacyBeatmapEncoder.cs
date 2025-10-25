@@ -136,7 +136,7 @@ namespace LAsOsuBeatmapParser.Beatmaps.Formats
             // HitObjects
             sb.AppendLine();
             sb.AppendLine("[HitObjects]");
-            foreach (HitObject hitObject in beatmap.HitObjects) sb.AppendLine(hitObject.ToString());
+            foreach (HitObject hitObject in beatmap.HitObjects) sb.AppendLine(hitObject.ToString().Trim());
 
             return sb.ToString();
         }

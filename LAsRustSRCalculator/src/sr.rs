@@ -81,11 +81,6 @@ impl SRCalculator {
 
         note_sequence.sort();
 
-        // Debug: print notes
-        // for note in &note_sequence {
-        //     println!("Rust Note: col={}, start={}, end={}", note.k, note.h, note.t);
-        // }
-
         let mut x = 0.3 * ((64.5 - (od * 3.0).ceil()) / 500.0).sqrt();
         x = x.min(0.6 * (x - 0.09) + 0.09);
 
@@ -173,11 +168,6 @@ impl SRCalculator {
         }
 
         note_sequence.sort();
-
-        // Debug: print notes
-        // for note in &note_sequence {
-        //     println!("Rust Note: col={}, start={}, end={}", note.k, note.h, note.t);
-        // }
 
         let mut x = 0.3 * ((64.5 - (od * 3.0).ceil()) / 500.0).sqrt();
         x = x.min(0.6 * (x - 0.09) + 0.09);

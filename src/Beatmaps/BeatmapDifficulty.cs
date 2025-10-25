@@ -70,7 +70,7 @@ namespace LAsOsuBeatmapParser.Beatmaps
         public bool Equals(IBeatmapDifficultyInfo? other)
         {
             if (other == null) return false;
-            float TOLERANCE = 0;
+            float TOLERANCE = 0.001f;
             return Math.Abs(HPDrainRate - other.DrainRate) < TOLERANCE &&
                    Math.Abs(CircleSize - other.CircleSize) < TOLERANCE &&
                    Math.Abs(OverallDifficulty - other.OverallDifficulty) < TOLERANCE &&

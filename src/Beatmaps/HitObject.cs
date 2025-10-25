@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using System.Numerics;
 
 namespace LAsOsuBeatmapParser.Beatmaps
 {
@@ -25,7 +26,7 @@ namespace LAsOsuBeatmapParser.Beatmaps
         /// <summary>
         /// 坐标（x, y）。
         /// </summary>
-        public (float X, float Y) Position { get; set; }
+        public virtual Vector2 Position { get; set; }
 
         /// <summary>
         /// HitObject类型。

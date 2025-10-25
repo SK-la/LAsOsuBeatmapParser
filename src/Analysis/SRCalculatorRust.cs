@@ -81,61 +81,6 @@ namespace LAsOsuBeatmapParser.Analysis
             return null;
         }
 
-        public static (double? sr, List<(int col, int start, int end)>? notes) CalculateSRWithNotes(string filePath)
-        {
-            if (string.IsNullOrEmpty(filePath))
-                return (null, null);
-
-            try
-            {
-                byte[] pathBytes = System.Text.Encoding.UTF8.GetBytes(filePath);
-                IntPtr pathPtr = Marshal.AllocHGlobal(pathBytes.Length);
-                Marshal.Copy(pathBytes, 0, pathPtr, pathBytes.Length);
-
-                IntPtr resultPtr = calculate_sr_from_osu_file(pathPtr, (UIntPtr)pathBytes.Length);
-
-                Marshal.FreeHGlobal(pathPtr);
-
-                if (resultPtr == IntPtr.Zero)
-                    return (null, null);
-
-                string resultJson = Marshal.PtrToStringUTF8(resultPtr)!;
-                Marshal.FreeHGlobal(resultPtr);
-
-                // Debug: print the JSON
-                Console.WriteLine($"Rust JSON length: {resultJson.Length}");
-                Console.WriteLine($"Rust JSON: {resultJson}");
-
-                using var doc = JsonDocument.Parse(resultJson);
-                var root = doc.RootElement;
-                double? sr = null;
-                if (root.TryGetProperty("sr", out JsonElement srElement) && srElement.ValueKind == JsonValueKind.Number)
-                    sr = srElement.GetDouble();
-
-                List<(int, int, int)>? notes = null;
-                if (root.TryGetProperty("notes", out JsonElement notesElement) && notesElement.ValueKind == JsonValueKind.Array)
-                {
-                    notes = new List<(int, int, int)>();
-                    foreach (var note in notesElement.EnumerateArray())
-                    {
-                        if (note.TryGetProperty("col", out var col) && col.ValueKind == JsonValueKind.Number &&
-                            note.TryGetProperty("start", out var start) && start.ValueKind == JsonValueKind.Number &&
-                            note.TryGetProperty("end", out var end) && end.ValueKind == JsonValueKind.Number)
-                        {
-                            notes.Add((col.GetInt32(), start.GetInt32(), end.GetInt32()));
-                        }
-                    }
-                }
-
-                return (sr, notes);
-            }
-            catch (Exception)
-            {
-                // Return null on any error (including Rust panics)
-                return (null, null);
-            }
-        }
-
         public static double? CalculateSR_FromFile(string filePath)
         {
             return CalculateSR(filePath);
@@ -214,7 +159,9 @@ namespace LAsOsuBeatmapParser.Analysis
             return calculate_sr_from_struct(data);
         }
 
-        public static string ConvertBeatmapToJson(LAsOsuBeatmapParser.Beatmaps.Beatmap beatmap)
+        #region 单元测试用检查
+
+        public static string ConvertBeatmapToJson(Beatmap beatmap)
         {
             var jsonBeatmap = new
             {
@@ -235,7 +182,7 @@ namespace LAsOsuBeatmapParser.Analysis
             return JsonSerializer.Serialize(jsonBeatmap, options);
         }
 
-        public static CBeatmapData ConvertBeatmapToStruct(LAsOsuBeatmapParser.Beatmaps.Beatmap beatmap)
+        public static CBeatmapData ConvertBeatmapToStruct(Beatmap beatmap)
         {
             var hitObjects = beatmap.HitObjects.Select(ho => new CHitObject
             {
@@ -258,5 +205,7 @@ namespace LAsOsuBeatmapParser.Analysis
                 hit_objects_ptr = hitObjectsPtr
             };
         }
+
+        #endregion
     }
 }

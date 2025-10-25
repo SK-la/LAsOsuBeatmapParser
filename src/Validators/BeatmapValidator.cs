@@ -45,15 +45,15 @@ namespace LAsOsuBeatmapParser.Validators
             // Mania模式专属验证
             if (beatmap.Mode.Id == GameMode.Mania.Id)
             {
-                ManiaBeatmap maniaBeatmap = beatmap.GetManiaBeatmap();
+                var maniaBeatmap = beatmap.GetManiaBeatmap();
 
                 // 验证列数
-                if (maniaBeatmap.TotalColumns <= 0 || maniaBeatmap.TotalColumns > 10) errors.Add($"Mania谱面列数无效: {maniaBeatmap.TotalColumns} (应在1-10之间)");
+                int totalColumns = (int)maniaBeatmap.Difficulty.CircleSize;
 
                 // 验证ManiaHitObject的列索引
                 foreach (ManiaHitObject hitObject in maniaBeatmap.HitObjects)
-                    if (hitObject.Column < 0 || hitObject.Column >= maniaBeatmap.TotalColumns)
-                        errors.Add($"{hitObject.GetType().Name}列索引超出范围: {hitObject.Column} (应在0-{maniaBeatmap.TotalColumns - 1}之间)");
+                    if (hitObject.Column < 0 || hitObject.Column >= totalColumns)
+                        errors.Add($"{hitObject.GetType().Name}列索引超出范围: {hitObject.Column} (应在0-{totalColumns - 1}之间)");
             }
 
             return errors;

@@ -33,11 +33,11 @@ namespace LAsOsuBeatmapParser.Tests
 
         private static readonly string SingleTestFile = Path.Combine(
             TestResourceDir,
-            "Jumpstream - Happy Hardcore Synthesizer (SK_la) [10k-1].osu"
+            "Glen Check - 60's Cardin (SK_la) [Insane].osu"
         );
 
         private static readonly string[] MultipleTestFiles = Directory.GetFiles(TestResourceDir, "*.osu")
-                                                                      .Where(f => !f.Contains("SUPERMUG") && !f.Contains("encoded_output"))
+                                                                      .Where(f => !f.Contains("encoded_output"))
                                                                       .ToArray();
 
         public VersionCSRTests(ITestOutputHelper output)
@@ -71,8 +71,8 @@ namespace LAsOsuBeatmapParser.Tests
             {
                 ("Current (Production)", bm => SRCalculator.Instance.CalculateSR(bm, out _)),
                 ("V3.0", bm => SRCalculatorV30.Instance.CalculateSR(bm, out _)),
-                ("V3.0-Before", bm => CalculateWithV30Before(bm)),
-                ("V2.3", bm => CalculateWithV23(bm))
+                ("V3.0-Before", CalculateWithV30Before),
+                ("V2.3", CalculateWithV23)
             };
 
             // Act - 每个版本计算一次
@@ -100,7 +100,7 @@ namespace LAsOsuBeatmapParser.Tests
             }
 
             // Assert - 验证结果合理性
-            foreach ((string version, double sr, long timeMs, long memoryBytes) in results)
+            foreach ((string version, double sr, long _, long _) in results)
             {
                 Assert.True(sr >= 0, $"SR值不能为负 ({version}): {sr}");
                 Assert.True(sr <= 10, $"SR值过高 ({version}): {sr}");
@@ -132,8 +132,8 @@ namespace LAsOsuBeatmapParser.Tests
             {
                 ("Current (Production)", bm => SRCalculator.Instance.CalculateSR(bm, out _)),
                 ("V3.0", bm => SRCalculatorV30.Instance.CalculateSR(bm, out _)),
-                ("V3.0-Before", bm => CalculateWithV30Before(bm)),
-                ("V2.3", bm => CalculateWithV23(bm))
+                ("V3.0-Before", CalculateWithV30Before),
+                ("V2.3", CalculateWithV23)
             };
 
             // Act - 每个文件每个版本计算一次
@@ -161,7 +161,7 @@ namespace LAsOsuBeatmapParser.Tests
             }
 
             // Assert - 验证结果合理性
-            foreach ((string fileName, string version, double sr, long timeMs, long memoryBytes) in results)
+            foreach ((string fileName, string version, double sr, long _, long _) in results)
             {
                 Assert.True(sr >= 0, $"SR值不能为负 ({fileName} - {version}): {sr}");
                 Assert.True(sr <= 10, $"SR值过高 ({fileName} - {version}): {sr}");
@@ -196,7 +196,7 @@ namespace LAsOsuBeatmapParser.Tests
 
             foreach (HitObject hitObject in beatmap.HitObjects)
             {
-                int col = hitObject is ManiaHitObject maniaHit ? maniaHit.Column : (int)Math.Floor(hitObject.Position.X * keyCount / 512.0);
+                int col = hitObject is ManiaHitObject maniaHit ? maniaHit.Column : ManiaExtensions.GetColumnFromX(keyCount, hitObject.Position.X);
                 int time = (int)hitObject.StartTime;
                 int tail = hitObject.EndTime > hitObject.StartTime ? (int)hitObject.EndTime : -1;
                 noteSequence.Add(new SRsNote(col, time, tail));

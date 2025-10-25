@@ -30,17 +30,10 @@ namespace LAsOsuBeatmapParser.Tests
 
         private static readonly string SingleTestFile = Path.Combine(
             TestResourceDir,
-            "Jumpstream - Happy Hardcore Synthesizer (SK_la) [10k-1].osu"
+            "Glen Check - 60's Cardin (SK_la) [Insane].osu"
         );
 
-        private static readonly string ComparisonTestFile = Path.Combine(
-            TestResourceDir,
-            "encoded_output.osu"
-        );
-
-        private static readonly string[] MultipleTestFiles = Directory.GetFiles(TestResourceDir, "*.osu")
-                                                                      .Where(f => !f.Contains("SUPERMUG"))
-                                                                      .ToArray();
+        private static readonly string[] MultipleTestFiles = Directory.GetFiles(TestResourceDir, "*.osu");
 
         public ComparisonTests(ITestOutputHelper output)
         {
@@ -105,7 +98,7 @@ namespace LAsOsuBeatmapParser.Tests
             }
 
             // Assert - 验证结果合理性
-            foreach ((string algorithm, double sr, long timeMs, long memoryBytes) in results)
+            foreach ((string algorithm, double sr, long _, long _) in results)
             {
                 Assert.True(sr >= 0, $"SR值不能为负 ({algorithm}): {sr}");
                 Assert.True(sr <= 10, $"SR值过高 ({algorithm}): {sr}");
@@ -148,7 +141,6 @@ namespace LAsOsuBeatmapParser.Tests
             foreach (string filePath in MultipleTestFiles)
             {
                 Beatmap beatmap = decoder.Decode(filePath);
-                string fileName = Path.GetFileName(filePath);
 
                 foreach ((string algorithmName, Func<Beatmap, string, double> calculator) in algorithms)
                 {
@@ -169,7 +161,7 @@ namespace LAsOsuBeatmapParser.Tests
             }
 
             // Assert - 验证结果合理性
-            foreach ((double cs, string algorithm, double sr, long timeMs, long memoryBytes) in results)
+            foreach ((double cs, string algorithm, double sr, long _, long _) in results)
             {
                 Assert.True(sr >= 0, $"SR值不能为负 (CS{cs} - {algorithm}): {sr}");
                 Assert.True(sr <= 10, $"SR值过高 (CS{cs} - {algorithm}): {sr}");
@@ -178,7 +170,7 @@ namespace LAsOsuBeatmapParser.Tests
             // 计算统计信息
             IEnumerable<IGrouping<string, (double cs, string algorithm, double sr, long timeMs, long memoryBytes)>> algorithmGroups = results.GroupBy(r => r.algorithm);
 
-            foreach (IGrouping<string, (string fileName, string algorithm, double sr, long timeMs, long memoryBytes)> group in algorithmGroups)
+            foreach (var group in algorithmGroups)
             {
                 double avgSR = group.Average(r => r.sr);
                 double avgTime = group.Average(r => r.timeMs);
@@ -198,11 +190,10 @@ namespace LAsOsuBeatmapParser.Tests
         public void TestComparisonEncodedOutputFile_Once()
         {
             // Arrange
-            Assert.True(File.Exists(ComparisonTestFile), $"Comparison test file not found: {ComparisonTestFile}");
             var decoder = new LegacyBeatmapDecoder();
-            Beatmap beatmap = decoder.Decode(ComparisonTestFile);
+            Beatmap beatmap = decoder.Decode(SingleTestFile);
 
-            _output.WriteLine($"=== C#+Rust SR算法对比 - encoded_output.osu测试 ===");
+            _output.WriteLine($"=== C#+Rust SR算法对比 - test10K--6.1SR.osu测试 ===");
             _output.WriteLine($"CS值: {beatmap.BeatmapInfo.Difficulty.CircleSize}");
             _output.WriteLine($"谱面信息: {beatmap.BeatmapInfo.Metadata.Artist} - {beatmap.BeatmapInfo.Metadata.Title} [{beatmap.BeatmapInfo.Metadata.Version}]");
             _output.WriteLine($"键数: {(int)beatmap.BeatmapInfo.Difficulty.CircleSize}k");
@@ -220,10 +211,10 @@ namespace LAsOsuBeatmapParser.Tests
             {
                 ("C# Current", bm => SRCalculator.Instance.CalculateSR(bm, out _)),
                 ("C# Rust", bm => SRCalculator.Instance.CalculateSRRust(bm)),
-                ("C# FromFile", bm => CalculateSRFromFile(ComparisonTestFile)),
-                ("C# FromContent", bm => CalculateSRFromContent(File.ReadAllText(ComparisonTestFile))),
-                ("Rust FromFile", bm => SRCalculatorRust.CalculateSR_FromFile(ComparisonTestFile) ?? -1),
-                ("Rust FromContent", bm => SRCalculatorRust.CalculateSR_FromContent(File.ReadAllText(ComparisonTestFile)) ?? -1),
+                ("C# FromFile", bm => CalculateSRFromFile(SingleTestFile)),
+                ("C# FromContent", bm => CalculateSRFromContent(File.ReadAllText(SingleTestFile))),
+                ("Rust FromFile", bm => SRCalculatorRust.CalculateSR_FromFile(SingleTestFile) ?? -1),
+                ("Rust FromContent", bm => SRCalculatorRust.CalculateSR_FromContent(File.ReadAllText(SingleTestFile)) ?? -1),
                 ("Rust FromJson", bm => SRCalculatorRust.CalculateSR_FromJson(SRCalculatorRust.ConvertBeatmapToJson(bm)) ?? -1)
             };
 
@@ -252,13 +243,13 @@ namespace LAsOsuBeatmapParser.Tests
             }
 
             // Assert - 验证结果合理性
-            foreach ((string algorithm, double sr, long timeMs, long memoryBytes) in results)
+            foreach ((string algorithm, double sr, long _, long _) in results)
             {
                 Assert.True(sr >= 0, $"SR值不能为负 ({algorithm}): {sr}");
                 Assert.True(sr <= 10, $"SR值过高 ({algorithm}): {sr}");
             }
 
-            _output.WriteLine("✅ encoded_output.osu对比测试完成");
+            _output.WriteLine("✅ test10K--6.1SR.osu对比测试完成");
         }
 
         // 辅助方法：从文件计算SR

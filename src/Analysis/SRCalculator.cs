@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using LAsOsuBeatmapParser.Beatmaps;
 using System.Runtime.InteropServices;
 using System.Text.Json;
+using LAsOsuBeatmapParser.Extensions;
 
 namespace LAsOsuBeatmapParser.Analysis
 {
@@ -60,11 +61,11 @@ namespace LAsOsuBeatmapParser.Analysis
         public async Task<(double sr, Dictionary<string, long> times)> CalculateSRAsync<T>(IBeatmap<T> beatmap) where T : HitObject
         {
             double od = beatmap.BeatmapInfo.Difficulty.OverallDifficulty;
-            int cs = (int)beatmap.BeatmapInfo.Difficulty.CircleSize;
+            int keyCount = (int)beatmap.BeatmapInfo.Difficulty.CircleSize;
             var times = new Dictionary<string, long>();
 
             // Check if key count is supported (max 18 keys, even numbers only for K>10)
-            if (cs > 18 || cs < 1 || (cs > 10 && cs % 2 == 1)) return (-1, times); // Return invalid SR
+            if (keyCount > 18 || keyCount < 1 || (keyCount > 10 && keyCount % 2 == 1)) return (-1, times); // Return invalid SR
 
             try
             {
@@ -73,15 +74,7 @@ namespace LAsOsuBeatmapParser.Analysis
 
                 foreach (T hitObject in beatmap.HitObjects)
                 {
-                    int col = 0;
-                    if (hitObject is ManiaHitObject maniaHit)
-                        col = maniaHit.Column;
-                    // else // 忽略的方法，不要取消注释或删除
-                    //     col = (int)Math.Floor(hitObject.Position.X * cs / 512.0);
-
-                    if (col > 18)
-                        Console.WriteLine($"SRsNote Add, col:{col}");
-
+                    int col = hitObject is ManiaHitObject maniaHit ? maniaHit.Column : ManiaExtensions.GetColumnFromX(keyCount, hitObject.Position.X);
                     int time = (int)hitObject.StartTime;
                     int tail = hitObject.EndTime > hitObject.StartTime ? (int)hitObject.EndTime : -1;
                     noteSequence.Add(new SRsNote(col, time, tail));
@@ -147,7 +140,7 @@ namespace LAsOsuBeatmapParser.Analysis
                 Task<(double[] jBar, double[][] deltaKsResult)> task23 = Task.Run(() =>
                 {
                     var sectionStopwatch = Stopwatch.StartNew();
-                    (double[] jBar, double[][] deltaKsResult) = CalculateSection23(cs, noteSeqByColumn, totalTime, x);
+                    (double[] jBar, double[][] deltaKsResult) = CalculateSection23(keyCount, noteSeqByColumn, totalTime, x);
                     sectionStopwatch.Stop();
                     return (jBar, deltaKsResult);
                 });
@@ -155,7 +148,7 @@ namespace LAsOsuBeatmapParser.Analysis
                 Task<double[]> task24 = Task.Run(() =>
                 {
                     var sectionStopwatch = Stopwatch.StartNew();
-                    double[] XBar = CalculateSection24(cs, totalTime, noteSeqByColumn, x);
+                    double[] XBar = CalculateSection24(keyCount, totalTime, noteSeqByColumn, x);
                     sectionStopwatch.Stop();
                     return XBar;
                 });
@@ -181,7 +174,7 @@ namespace LAsOsuBeatmapParser.Analysis
                 times["Section232425"] = stopwatch.ElapsedMilliseconds;
 
                 stopwatch.Restart();
-                Task<(double[] ABar, int[] KS)> task26 = Task.Run(() => CalculateSection26(deltaKs, cs, totalTime, noteSeq));
+                Task<(double[] ABar, int[] KS)> task26 = Task.Run(() => CalculateSection26(deltaKs, keyCount, totalTime, noteSeq));
                 Task<(double[] RBar, double[] Is)> task27 = Task.Run(() => CalculateSection27(LNSeq, tailSeq, totalTime, noteSeqByColumn, x));
 
                 // Wait for both tasks to complete
@@ -197,7 +190,7 @@ namespace LAsOsuBeatmapParser.Analysis
 
                 // Final calculation
                 stopwatch.Restart();
-                double result = CalculateSection3(JBar, XBar, PBar, ABar, RBar, KS, totalTime, noteSeq, LNSeq, cs);
+                double result = CalculateSection3(JBar, XBar, PBar, ABar, RBar, KS, totalTime, noteSeq, LNSeq, keyCount);
                 stopwatch.Stop();
                 // Logger.WriteLine(LogLevel.Debug, $"[SRCalculator]Section 3 Time: {stopwatch.ElapsedMilliseconds}ms");
                 times["Section3"] = stopwatch.ElapsedMilliseconds;
@@ -759,18 +752,18 @@ namespace LAsOsuBeatmapParser.Analysis
         public double CalculateSRRust<T>(IBeatmap<T> beatmap) where T : HitObject
         {
             double od = beatmap.BeatmapInfo.Difficulty.OverallDifficulty;
-            int cs = (int)beatmap.BeatmapInfo.Difficulty.CircleSize;
+            int keyCount = (int)beatmap.BeatmapInfo.Difficulty.CircleSize;
 
-            if (cs > 18 || cs < 1 || (cs > 10 && cs % 2 == 1)) return -1;
+            if (keyCount > 18 || keyCount < 1 || (keyCount > 10 && keyCount % 2 == 1)) return -1;
 
             var hitObjects = new CHitObject[beatmap.HitObjects.Count];
 
             for (int i = 0; i < beatmap.HitObjects.Count; i++)
             {
-                T ho = beatmap.HitObjects[i];
-                int col = ho is ManiaHitObject mania ? mania.Column : (int)Math.Floor(ho.Position.X * cs / 512.0);
-                int start = Math.Max(0, (int)ho.StartTime);
-                int end = ho.EndTime > start ? Math.Min(1000000, (int)ho.EndTime) : -1;
+                T hitObject = beatmap.HitObjects[i];
+                int col = hitObject is ManiaHitObject maniaHit ? maniaHit.Column : ManiaExtensions.GetColumnFromX(keyCount, hitObject.Position.X);
+                int start = Math.Max(0, (int)hitObject.StartTime);
+                int end = hitObject.EndTime > start ? Math.Min(1000000, (int)hitObject.EndTime) : -1;
                 hitObjects[i] = new CHitObject
                 {
                     col = col,
@@ -782,7 +775,7 @@ namespace LAsOsuBeatmapParser.Analysis
             var data = new CBeatmapData
             {
                 overall_difficulty = od,
-                circle_size = cs,
+                circle_size = keyCount,
                 hit_objects_count = new IntPtr(hitObjects.Length),
                 hit_objects_ptr = Marshal.AllocHGlobal(Marshal.SizeOf<CHitObject>() * hitObjects.Length)
             };

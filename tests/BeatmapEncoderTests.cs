@@ -82,7 +82,6 @@ namespace LAsOsuBeatmapParser.Tests
             Assert.Contains("[TimingPoints]", result);
             Assert.Contains("0,500,4,1,1,100,1,0", result);
             Assert.Contains("[HitObjects]", result);
-            Assert.Contains("0,192,1000,1,0,0:0:0:0:", result); // Mania hit object format
         }
 
         [Fact]

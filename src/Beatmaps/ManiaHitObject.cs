@@ -1,4 +1,5 @@
 using System;
+using System.Numerics;
 using LAsOsuBeatmapParser.Objects.Types;
 using LAsOsuBeatmapParser.Extensions;
 
@@ -15,32 +16,27 @@ namespace LAsOsuBeatmapParser.Beatmaps
         public int Column { get; set; }
 
         /// <summary>
-        /// The total number of columns (key count) for this beatmap.
+        /// The total number of keys (columns) in this mania beatmap.
         /// </summary>
         public int KeyCount { get; set; }
 
         /// <summary>
-        /// For Mania, Position.X represents the calculated X coordinate from column.
+        /// For Mania, Position.X represents the normalized X coordinate from column.
         /// Position.Y is always 192 (center of playfield).
         /// </summary>
-        public new (float X, float Y) Position
+        public override Vector2 Position
         {
-            get => (ManiaExtensions.GetPositionX(KeyCount, Column), 192f);
-            set
-            {
-                // When setting position, convert back to column
-                if (KeyCount > 0)
-                    Column = ManiaExtensions.GetColumnFromX(KeyCount, value.X);
-            }
+            get => new Vector2(ManiaExtensions.GetPositionX(KeyCount, Column), 192f);
+            set => Column = ManiaExtensions.GetColumnFromX(KeyCount, value.X);
         }
 
         /// <summary>
-        /// Implements IHasXPosition.X - returns the column as X position.
+        /// Implements IHasXPosition.X - returns the X coordinate.
         /// </summary>
         public float X
         {
-            get => Column;
-            set => Column = (int)value;
+            get => Position.X;
+            set => Position = new Vector2(value, Position.Y);
         }
 
         /// <summary>
@@ -66,7 +62,7 @@ namespace LAsOsuBeatmapParser.Beatmaps
         /// </summary>
         /// <param name="startTime">The start time.</param>
         /// <param name="column">The column.</param>
-        /// <param name="keyCount">The total number of columns.</param>
+        /// <param name="keyCount">The total number of keys.</param>
         public ManiaHitObject(double startTime, int column, int keyCount)
         {
             StartTime = startTime;
@@ -75,16 +71,15 @@ namespace LAsOsuBeatmapParser.Beatmaps
         }
 
         /// <summary>
-        /// Returns a string representation of this hit object.
+        /// Returns a string representation of this hit object. 使用算法规范化坐标
         /// </summary>
         /// <returns>The string representation.</returns>
         public override string ToString()
         {
             // Mania hit objects: x,y,time,type,hitSound,hitSample
             // x is position, y is 192 for standard position
-            // Use new formula
-            int x = ManiaExtensions.GetPositionX(KeyCount, Column);
-            int y = 192; // Standard y position for mania
+            int x = (int)Position.X;
+            int y = (int)Position.Y;
             int type = 1; // Normal hit
 
             // Ensure hit samples has a default value for mania

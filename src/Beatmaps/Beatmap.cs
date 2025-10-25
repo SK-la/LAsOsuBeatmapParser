@@ -97,7 +97,7 @@ namespace LAsOsuBeatmapParser.Beatmaps
         /// 游戏模式（Standard、Taiko、Catch、Mania）。
         /// </summary>
         [JsonIgnore]
-        public IGameMode Mode { get; set; } = GameMode.Standard;
+        public IGameMode Mode { get; set; } = GameMode.Mania;
 
         /// <summary>
         /// 谱面版本。
