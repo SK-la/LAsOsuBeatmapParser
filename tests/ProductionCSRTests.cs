@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Threading;
 using LAsOsuBeatmapParser.Analysis;
 using LAsOsuBeatmapParser.Beatmaps;
@@ -77,17 +78,25 @@ namespace LAsOsuBeatmapParser.Tests
 
                 results.Add((sr, stopwatch.ElapsedMilliseconds, memoryUsed));
 
-                _output.WriteLine($"第{i + 1}次计算:");
-                _output.WriteLine($"  SR: {sr:F4}");
-                _output.WriteLine($"  时间: {stopwatch.ElapsedMilliseconds}ms");
-                _output.WriteLine($"  内存使用: {memoryUsed} bytes ({memoryUsed / (1024.0 * 1024.0):F2} MB)");
-                _output.WriteLine(
-                    $"  详细时间: Section23/24/25={times.GetValueOrDefault("Section232425", 0)}ms, Section26/27={times.GetValueOrDefault("Section2627", 0)}ms, Section3={times.GetValueOrDefault("Section3", 0)}ms, Total={times.GetValueOrDefault("Total", 0)}ms");
-                _output.WriteLine("");
-
                 // 计算间隔延迟
                 if (i < 2) Thread.Sleep(50);
             }
+
+            // 输出表格
+            _output.WriteLine("=== 循环3次结果表格 ===");
+            var table = new StringBuilder();
+            table.AppendLine("| 次数 | SR     | 时间(ms) | 内存(MB) |");
+            table.AppendLine("|------|--------|----------|----------|");
+
+            for (int i = 0; i < results.Count; i++)
+            {
+                (double sr, long timeMs, long memoryBytes) = results[i];
+                double memoryMB = memoryBytes / (1024.0 * 1024.0);
+                table.AppendLine($"| {i + 1,-4} | {sr,6:F4} | {timeMs,8} | {memoryMB,8:F2} |");
+            }
+
+            _output.WriteLine(table.ToString());
+            _output.WriteLine("");
 
             // Assert - 验证结果合理性
             foreach ((double sr, long timeMs, long memoryBytes) in results)
@@ -145,15 +154,24 @@ namespace LAsOsuBeatmapParser.Tests
 
                 results.Add((beatmap.BeatmapInfo.Difficulty.CircleSize, sr, stopwatch.ElapsedMilliseconds, memoryUsed));
 
-                _output.WriteLine($"CS {beatmap.BeatmapInfo.Difficulty.CircleSize}:");
-                _output.WriteLine($"  SR: {sr:F4}");
-                _output.WriteLine($"  时间: {stopwatch.ElapsedMilliseconds}ms");
-                _output.WriteLine($"  内存使用: {memoryUsed} bytes ({memoryUsed / (1024.0 * 1024.0):F2} MB)");
-                _output.WriteLine("");
-
                 // 计算间隔延迟
                 Thread.Sleep(20);
             }
+
+            // 输出表格
+            _output.WriteLine("=== 多个文件结果表格 ===");
+            var table = new StringBuilder();
+            table.AppendLine("| CS  | SR     | 时间(ms) | 内存(MB) |");
+            table.AppendLine("|-----|--------|----------|----------|");
+
+            foreach ((double cs, double sr, long timeMs, long memoryBytes) in results)
+            {
+                double memoryMB = memoryBytes / (1024.0 * 1024.0);
+                table.AppendLine($"| {cs,3:F1} | {sr,6:F4} | {timeMs,8} | {memoryMB,8:F2} |");
+            }
+
+            _output.WriteLine(table.ToString());
+            _output.WriteLine("");
 
             // Assert - 验证结果合理性
             foreach ((double cs, double sr, long timeMs, long memoryBytes) in results)

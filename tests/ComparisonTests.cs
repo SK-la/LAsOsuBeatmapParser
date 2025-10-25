@@ -3,10 +3,13 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Threading;
 using LAsOsuBeatmapParser.Analysis;
 using LAsOsuBeatmapParser.Beatmaps;
 using LAsOsuBeatmapParser.Beatmaps.Formats;
+using LAsOsuBeatmapParser.Extensions;
+using LAsOsuBeatmapParser.Tests.AnalysisSR;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -52,6 +55,7 @@ namespace LAsOsuBeatmapParser.Tests
             _output.WriteLine($"CS值: {beatmap.BeatmapInfo.Difficulty.CircleSize}");
             _output.WriteLine($"谱面信息: {beatmap.BeatmapInfo.Metadata.Artist} - {beatmap.BeatmapInfo.Metadata.Title} [{beatmap.BeatmapInfo.Metadata.Version}]");
             _output.WriteLine($"键数: {(int)beatmap.BeatmapInfo.Difficulty.CircleSize}k");
+            _output.WriteLine($"C# parsed hit objects: {beatmap.HitObjects.Count}");
             _output.WriteLine("");
 
             // 预热JIT
@@ -65,12 +69,11 @@ namespace LAsOsuBeatmapParser.Tests
             var algorithms = new (string name, Func<Beatmap, double> calculator)[]
             {
                 ("C# Current", bm => SRCalculator.Instance.CalculateSR(bm, out _)),
-                ("C# Rust", bm => SRCalculator.Instance.CalculateSRRust(bm)),
                 ("C# FromFile", bm => CalculateSRFromFile(SingleTestFile)),
                 ("C# FromContent", bm => CalculateSRFromContent(File.ReadAllText(SingleTestFile))),
-                ("Rust FromFile", bm => SRCalculatorRust.CalculateSR_FromFile(SingleTestFile) ?? -1),
-                ("Rust FromContent", bm => SRCalculatorRust.CalculateSR_FromContent(File.ReadAllText(SingleTestFile)) ?? -1),
-                ("Rust FromJson", bm => SRCalculatorRust.CalculateSR_FromJson(SRCalculatorRust.ConvertBeatmapToJson(bm)) ?? -1)
+                ("C# V3.0", bm => SRCalculatorV30.Instance.CalculateSR(bm, out _)),
+                ("C# V2.3", CalculateWithV23),
+                ("Rust FromFile", bm => SRCalculatorRust.CalculateSR_FromFile(SingleTestFile) ?? -1)
             };
 
             // Act - 每个算法计算一次
@@ -87,15 +90,25 @@ namespace LAsOsuBeatmapParser.Tests
 
                 results.Add((name, sr, stopwatch.ElapsedMilliseconds, memoryUsed));
 
-                _output.WriteLine($"{name}:");
-                _output.WriteLine($"  SR: {sr:F4}");
-                _output.WriteLine($"  时间: {stopwatch.ElapsedMilliseconds}ms");
-                _output.WriteLine($"  内存使用: {memoryUsed} bytes ({memoryUsed / (1024.0 * 1024.0):F2} MB)");
-                _output.WriteLine("");
-
                 // 计算间隔延迟
                 Thread.Sleep(50);
             }
+
+            // 输出表格
+            _output.WriteLine("=== 单一文件算法对比表格 ===");
+            var table = new StringBuilder();
+            table.AppendLine("| 算法       | SR     | 时间(ms) | 内存(MB) |");
+            table.AppendLine("|------------|--------|----------|----------|");
+
+            foreach ((string algorithm, double sr, long timeMs, long memoryBytes) in results)
+            {
+                double memoryMB = memoryBytes / (1024.0 * 1024.0);
+                table.AppendLine($"| {algorithm,-10} | {sr,6:F4} | {timeMs,8} | {memoryMB,8:F2} |");
+                Console.WriteLine($"{algorithm}: SR={sr:F4}, Time={timeMs}ms, Memory={memoryMB:F2}MB");
+            }
+
+            _output.WriteLine(table.ToString());
+            _output.WriteLine("");
 
             // Assert - 验证结果合理性
             foreach ((string algorithm, double sr, long _, long _) in results)
@@ -129,12 +142,11 @@ namespace LAsOsuBeatmapParser.Tests
             var algorithms = new (string name, Func<Beatmap, string, double> calculator)[]
             {
                 ("C# Current", (bm,       fp) => SRCalculator.Instance.CalculateSR(bm, out _)),
-                ("C# Rust", (bm,          fp) => SRCalculator.Instance.CalculateSRRust(bm)),
+                ("C# V3.0", (bm,          fp) => SRCalculatorV30.Instance.CalculateSR(bm, out _)),
+                ("C# V2.3", (bm,          fp) => CalculateWithV23(bm)),
                 ("C# FromFile", (bm,      fp) => CalculateSRFromFile(fp)),
                 ("C# FromContent", (bm,   fp) => CalculateSRFromContent(File.ReadAllText(fp))),
-                ("Rust FromFile", (bm,    fp) => SRCalculatorRust.CalculateSR_FromFile(fp) ?? -1),
-                ("Rust FromContent", (bm, fp) => SRCalculatorRust.CalculateSR_FromContent(File.ReadAllText(fp)) ?? -1),
-                ("Rust FromJson", (bm,    fp) => SRCalculatorRust.CalculateSR_FromJson(SRCalculatorRust.ConvertBeatmapToJson(bm)) ?? -1)
+                ("Rust FromFile", (bm,    fp) => SRCalculatorRust.CalculateSR_FromFile(fp) ?? -1)
             };
 
             // Act - 每个文件每个算法计算一次
@@ -170,18 +182,24 @@ namespace LAsOsuBeatmapParser.Tests
             // 计算统计信息
             IEnumerable<IGrouping<string, (double cs, string algorithm, double sr, long timeMs, long memoryBytes)>> algorithmGroups = results.GroupBy(r => r.algorithm);
 
+            // 输出统计表格
+            _output.WriteLine("=== 多个文件算法统计表格 ===");
+            var table = new StringBuilder();
+            table.AppendLine("| 算法       | 平均SR | 平均时间(ms) | 平均内存(MB) |");
+            table.AppendLine("|------------|--------|--------------|--------------|");
+
             foreach (IGrouping<string, (double cs, string algorithm, double sr, long timeMs, long memoryBytes)> group in algorithmGroups)
             {
                 double avgSR     = group.Average(r => r.sr);
                 double avgTime   = group.Average(r => r.timeMs);
                 double avgMemory = group.Average(r => r.memoryBytes);
+                double avgMemoryMB = avgMemory / (1024.0 * 1024.0);
 
-                _output.WriteLine($"{group.Key} 统计:");
-                _output.WriteLine($"  平均SR: {avgSR:F4}");
-                _output.WriteLine($"  平均时间: {avgTime:F2}ms");
-                _output.WriteLine($"  平均内存使用: {avgMemory:F0} bytes ({avgMemory / (1024.0 * 1024.0):F2} MB)");
-                _output.WriteLine("");
+                table.AppendLine($"| {group.Key,-10} | {avgSR,6:F4} | {avgTime,12:F2} | {avgMemoryMB,12:F2} |");
             }
+
+            _output.WriteLine(table.ToString());
+            _output.WriteLine("");
 
             _output.WriteLine("✅ 多个文件对比测试完成");
         }
@@ -193,7 +211,7 @@ namespace LAsOsuBeatmapParser.Tests
             var     decoder = new LegacyBeatmapDecoder();
             Beatmap beatmap = decoder.Decode(SingleTestFile);
 
-            _output.WriteLine("=== C#+Rust SR算法对比 - test10K--6.1SR.osu测试 ===");
+            _output.WriteLine($"=== C#+Rust SR算法对比 -.osu测试 ===");
             _output.WriteLine($"CS值: {beatmap.BeatmapInfo.Difficulty.CircleSize}");
             _output.WriteLine($"谱面信息: {beatmap.BeatmapInfo.Metadata.Artist} - {beatmap.BeatmapInfo.Metadata.Title} [{beatmap.BeatmapInfo.Metadata.Version}]");
             _output.WriteLine($"键数: {(int)beatmap.BeatmapInfo.Difficulty.CircleSize}k");
@@ -209,13 +227,14 @@ namespace LAsOsuBeatmapParser.Tests
             // 定义所有算法
             var algorithms = new (string name, Func<Beatmap, double> calculator)[]
             {
-                ("C# Current", bm => SRCalculator.Instance.CalculateSR(bm, out _)),
-                ("C# Rust", bm => SRCalculator.Instance.CalculateSRRust(bm)),
-                ("C# FromFile", bm => CalculateSRFromFile(SingleTestFile)),
-                ("C# FromContent", bm => CalculateSRFromContent(File.ReadAllText(SingleTestFile))),
-                ("Rust FromFile", bm => SRCalculatorRust.CalculateSR_FromFile(SingleTestFile) ?? -1),
-                ("Rust FromContent", bm => SRCalculatorRust.CalculateSR_FromContent(File.ReadAllText(SingleTestFile)) ?? -1),
-                ("Rust FromJson", bm => SRCalculatorRust.CalculateSR_FromJson(SRCalculatorRust.ConvertBeatmapToJson(bm)) ?? -1)
+                ("C# F-File ", bm => CalculateSRFromFile(SingleTestFile)),
+                ("C# Instance", bm => SRCalculator.Instance.CalculateSR(bm, out _)),
+                ("C# F-Content", bm => CalculateSRFromContent(File.ReadAllText(SingleTestFile))),
+
+                ("C# V3.0", bm => SRCalculatorV30.Instance.CalculateSR(bm, out _)),
+                ("C# V2.3", CalculateWithV23),
+
+                ("Rust F-File", bm => SRCalculatorRust.CalculateSR_FromFile(SingleTestFile) ?? -1)
             };
 
             // Act - 每个算法计算一次
@@ -232,15 +251,24 @@ namespace LAsOsuBeatmapParser.Tests
 
                 results.Add((name, sr, stopwatch.ElapsedMilliseconds, memoryUsed));
 
-                _output.WriteLine($"{name}:");
-                _output.WriteLine($"  SR: {sr:F4}");
-                _output.WriteLine($"  时间: {stopwatch.ElapsedMilliseconds}ms");
-                _output.WriteLine($"  内存使用: {memoryUsed} bytes ({memoryUsed / (1024.0 * 1024.0):F2} MB)");
-                _output.WriteLine("");
-
                 // 计算间隔延迟
                 Thread.Sleep(50);
             }
+
+            // 输出表格
+            _output.WriteLine("=== test10K--6.1SR.osu算法对比表格 ===");
+            var table = new StringBuilder();
+            table.AppendLine("| 算法       | SR     | 时间(ms) | 内存(MB) |");
+            table.AppendLine("|------------|--------|----------|----------|");
+
+            foreach ((string algorithm, double sr, long timeMs, long memoryBytes) in results)
+            {
+                double memoryMB = memoryBytes / (1024.0 * 1024.0);
+                table.AppendLine($"| {algorithm,-10} | {sr,6:F4} | {timeMs,8} | {memoryMB,8:F2} |");
+            }
+
+            _output.WriteLine(table.ToString());
+            _output.WriteLine("");
 
             // Assert - 验证结果合理性
             foreach ((string algorithm, double sr, long _, long _) in results)
@@ -255,13 +283,32 @@ namespace LAsOsuBeatmapParser.Tests
         // 辅助方法：从文件计算SR
         private double CalculateSRFromFile(string filePath)
         {
-            return SRCalculator.Instance.CalculateSRFromFile(filePath);
+            return SRCalculator.Instance.CalculateSRFromFileCS(filePath);
         }
 
         // 辅助方法：从内容计算SR
         private double CalculateSRFromContent(string content)
         {
-            return SRCalculator.Instance.CalculateSRFromContent(content);
+            return SRCalculator.Instance.CalculateSRFromContentCS(content);
+        }
+
+        // 辅助方法：使用V2.3版本计算
+        private double CalculateWithV23(Beatmap beatmap)
+        {
+            var    calculator   = new SRCalculatorV23();
+            var    noteSequence = new List<SRsNote>();
+            int    keyCount     = (int)beatmap.BeatmapInfo.Difficulty.CircleSize;
+            double od           = beatmap.BeatmapInfo.Difficulty.OverallDifficulty;
+
+            foreach (HitObject hitObject in beatmap.HitObjects)
+            {
+                int col  = hitObject is ManiaHitObject maniaHit ? maniaHit.Column : ManiaExtensions.GetColumnFromX(keyCount, hitObject.Position.X);
+                int time = (int)hitObject.StartTime;
+                int tail = hitObject.EndTime > hitObject.StartTime ? (int)hitObject.EndTime : -1;
+                noteSequence.Add(new SRsNote(col, time, tail));
+            }
+
+            return calculator.Calculate(noteSequence, keyCount, od, out _);
         }
     }
 }

@@ -150,6 +150,9 @@ impl SRCalculator {
                 let col = ho.position.x as i32;
                 let mut time = ho.start_time;
                 let mut tail = ho.end_time;
+                if tail <= time {
+                    tail = -1;
+                }
                 if tail == -1 {
                     tail = time;
                 }
@@ -633,12 +636,8 @@ impl SRCalculator {
 
         let mut percentile93 = 0.0;
         for i in 0..4 {
-            let idx = match norm_cum_weights
-                .binary_search_by(|&x| x.partial_cmp(&target_percentiles[i]).unwrap())
-            {
-                Ok(idx) => idx,
-                Err(idx) => idx,
-            }
+            let idx = norm_cum_weights
+                .binary_search_by(|&x| x.partial_cmp(&target_percentiles[i]).unwrap()).unwrap_or_else(|idx| idx)
             .min(sorted_d.len() - 1);
             percentile93 += sorted_d[idx];
         }
@@ -646,12 +645,8 @@ impl SRCalculator {
 
         let mut percentile83 = 0.0;
         for i in 4..8 {
-            let idx = match norm_cum_weights
-                .binary_search_by(|&x| x.partial_cmp(&target_percentiles[i]).unwrap())
-            {
-                Ok(idx) => idx,
-                Err(idx) => idx,
-            }
+            let idx = norm_cum_weights
+                .binary_search_by(|&x| x.partial_cmp(&target_percentiles[i]).unwrap()).unwrap_or_else(|idx| idx)
             .min(sorted_d.len() - 1);
             percentile83 += sorted_d[idx];
         }
@@ -695,7 +690,7 @@ impl SRCalculator {
         let mut lst_bar = vec![0.0; t as usize];
         for s in (0..t as usize).step_by(Self::GRANULARITY as usize) {
             let left = (s as i32 - 500).max(0) as usize;
-            let right = ((s as i32 + 500).min(t as i32)) as usize;
+            let right = (s as i32 + 500).min(t) as usize;
             let sum = prefix_sum[right] - prefix_sum[left];
             lst_bar[s] = 0.001 * sum;
         }
@@ -731,7 +726,7 @@ pub extern "C" fn calculate_sr_from_json(json_ptr: *const u8, len: usize) -> *mu
         Err(_) => return std::ptr::null_mut(),
     };
 
-    let result = serde_json::json!({ "sr": sr });
+    let result = json!({ "sr": sr });
     let result_str = result.to_string();
     let c_str = std::ffi::CString::new(result_str).unwrap();
     c_str.into_raw() as *mut u8
@@ -862,12 +857,12 @@ fn parse_hit_object(line: &str, circle_size: f64) -> Option<HitObject> {
     let obj_type: i32 = parts[3].parse().ok()?;
 
     // For mania, calculate column from x using reverse of editor formula
-    let col = ((x * circle_size / 512.0 + 0.5).round() as i32 - 1).max(0).min((circle_size as i32 - 1).max(0));
+    let col = ((x * circle_size) / 512.0).floor() as i32;
 
     // Check if it's a long note (bit 7 set in type)
     let is_long_note = (obj_type & 128) != 0;
     let mut end_time = if is_long_note && parts.len() >= 6 {
-        parts[5].parse().unwrap_or(-1)
+        parts[5].split(':').next().unwrap_or("").parse().unwrap_or(-1)
     } else {
         -1
     };
@@ -894,16 +889,30 @@ pub extern "C" fn calculate_sr_from_osu_content(content_ptr: *const u8, len: usi
     };
 
     let sr_data = match SRData::from_osu_content(content) {
-        Ok(data) => data,
-        Err(_) => return std::ptr::null_mut(),
+        Ok(data) => {
+            eprintln!("Rust parsed {} hit objects", data.hit_objects.len());
+            data
+        },
+        Err(e) => {
+            eprintln!("Rust parse error: {}", e);
+            return std::ptr::null_mut();
+        }
     };
 
-    let sr = match SRCalculator::calculate_sr_from_data(&sr_data) {
+    let beatmap = Beatmap {
+        difficulty_section: DifficultySection {
+            overall_difficulty: sr_data.overall_difficulty,
+            circle_size: sr_data.circle_size,
+        },
+        hit_objects: sr_data.hit_objects,
+    };
+
+    let sr = match SRCalculator::calculate_sr(&beatmap) {
         Ok(s) => s,
         Err(_) => return std::ptr::null_mut(),
     };
 
-    let result = serde_json::json!({ "sr": sr });
+    let result = json!({ "sr": sr });
     let result_str = result.to_string();
     let c_str = std::ffi::CString::new(result_str).unwrap();
     c_str.into_raw() as *mut u8
@@ -923,12 +932,20 @@ pub extern "C" fn calculate_sr_from_osu_file(path_ptr: *const u8, len: usize) ->
         Err(_) => return std::ptr::null_mut(),
     };
 
-    let sr = match SRCalculator::calculate_sr_from_data(&sr_data) {
+    let beatmap = Beatmap {
+        difficulty_section: DifficultySection {
+            overall_difficulty: sr_data.overall_difficulty,
+            circle_size: sr_data.circle_size,
+        },
+        hit_objects: sr_data.hit_objects,
+    };
+
+    let sr = match SRCalculator::calculate_sr(&beatmap) {
         Ok(s) => s,
         Err(_) => return std::ptr::null_mut(),
     };
 
-    let notes: Vec<_> = sr_data.hit_objects.iter().take(20).map(|ho| json!({
+    let notes: Vec<_> = beatmap.hit_objects.iter().take(20).map(|ho| json!({
         "col": ho.position.x as i32,
         "start": ho.start_time,
         "end": ho.end_time

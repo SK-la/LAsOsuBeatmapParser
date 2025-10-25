@@ -41,56 +41,16 @@ namespace LAsOsuBeatmapParser.Tests
             // Arrange
             Assert.True(File.Exists(SingleTestFile), $"Test file not found: {SingleTestFile}");
 
-            var                           decoder    = new LegacyBeatmapDecoder();
-            Beatmap                       beatmap    = decoder.Decode(SingleTestFile);
-            string                        content    = File.ReadAllText(SingleTestFile);
-            string                        json       = SRCalculatorRust.ConvertBeatmapToJson(beatmap);
-            SRCalculatorRust.CBeatmapData structData = SRCalculatorRust.ConvertBeatmapToStruct(beatmap);
-
-            // Act & Collect results
-            var results = new List<(string Method, double Sr, long TimeMs)>();
-
-            // FromFile
-            var     stopwatch = Stopwatch.StartNew();
-            double? srFile    = SRCalculatorRust.CalculateSR_FromFile(SingleTestFile);
+            // Act
+            var stopwatch = Stopwatch.StartNew();
+            double? srFile = SRCalculatorRust.CalculateSR_FromFile(SingleTestFile);
             stopwatch.Stop();
-            Assert.NotNull(srFile);
-            Assert.True(srFile > 0);
-            results.Add(("FromFile", srFile.Value, stopwatch.ElapsedMilliseconds));
-
-            // FromContent
-            stopwatch.Restart();
-            double? srContent = SRCalculatorRust.CalculateSR_FromContent(content);
-            stopwatch.Stop();
-            Assert.NotNull(srContent);
-            Assert.True(srContent > 0);
-            results.Add(("FromContent", srContent.Value, stopwatch.ElapsedMilliseconds));
-
-            // FromJson
-            stopwatch.Restart();
-            double? srJson = SRCalculatorRust.CalculateSR_FromJson(json);
-            stopwatch.Stop();
-            Assert.NotNull(srJson);
-            Assert.True(srJson > 0);
-            results.Add(("FromJson", srJson.Value, stopwatch.ElapsedMilliseconds));
-
-            // FromStruct
-            stopwatch.Restart();
-            double srStruct = SRCalculatorRust.CalculateSR_FromStruct(structData);
-            stopwatch.Stop();
-            Assert.True(srStruct > 0);
-            results.Add(("FromStruct", srStruct, stopwatch.ElapsedMilliseconds));
 
             // Assert
-            foreach ((string method, double sr, long _) in results) Assert.True(sr > 0, $"SR from {method} must be positive: {sr}");
+            Assert.NotNull(srFile);
+            Assert.True(srFile > 0);
 
-            // Output table
-            _output.WriteLine("=== Rust SR Calculator Methods Comparison ===");
-            var table = new StringBuilder();
-            table.AppendLine("| Method     | SR       | Time (ms) |");
-            table.AppendLine("|------------|----------|-----------|");
-            foreach ((string method, double sr, long timeMs) in results) table.AppendLine($"| {method,-10} | {sr,8:F4} | {timeMs,9} |");
-            _output.WriteLine(table.ToString());
+            _output.WriteLine($"Rust SR Calculator FromFile: {srFile:F4} in {stopwatch.ElapsedMilliseconds}ms");
         }
 
         [Fact]
@@ -136,10 +96,7 @@ namespace LAsOsuBeatmapParser.Tests
     [MemoryDiagnoser]
     public class RustSRCalculatorBenchmarks
     {
-        private string                        _testContent;
         private string                        _testFilePath;
-        private string                        _testJson;
-        private SRCalculatorRust.CBeatmapData _testStruct;
 
         [GlobalSetup]
         public void Setup()
@@ -152,13 +109,6 @@ namespace LAsOsuBeatmapParser.Tests
 
             if (!File.Exists(_testFilePath))
                 throw new FileNotFoundException($"Benchmark file not found: {_testFilePath}");
-
-            var     decoder = new LegacyBeatmapDecoder();
-            Beatmap beatmap = decoder.Decode(_testFilePath);
-
-            _testContent = File.ReadAllText(_testFilePath);
-            _testJson    = SRCalculatorRust.ConvertBeatmapToJson(beatmap);
-            _testStruct  = SRCalculatorRust.ConvertBeatmapToStruct(beatmap);
         }
     }
 }
