@@ -1,5 +1,6 @@
 using System;
 using LAsOsuBeatmapParser.Objects.Types;
+using LAsOsuBeatmapParser.Extensions;
 
 namespace LAsOsuBeatmapParser.Beatmaps
 {
@@ -24,12 +25,12 @@ namespace LAsOsuBeatmapParser.Beatmaps
         /// </summary>
         public new (float X, float Y) Position
         {
-            get => (Column * (512f / KeyCount), 192f);
+            get => (ManiaExtensions.GetPositionX(KeyCount, Column + 1), 192f);
             set
             {
                 // When setting position, convert back to column
                 if (KeyCount > 0)
-                    Column = (int)Math.Round(value.X / (512f / KeyCount));
+                    Column = ManiaExtensions.GetColumnFromX(KeyCount, value.X);
             }
         }
 
@@ -81,11 +82,8 @@ namespace LAsOsuBeatmapParser.Beatmaps
         {
             // Mania hit objects: x,y,time,type,hitSound,hitSample
             // x is position, y is 192 for standard position
-            // Use official osu formula: x = ceil(column * (512 / keyCount))
-            const int totalWidth = 512;
-            int keyCount = KeyCount > 0 ? KeyCount : 4; // Default to 4 if not set
-            float ratio = totalWidth / (float)keyCount;
-            int x = (int)Math.Ceiling(Column * ratio);
+            // Use new formula
+            int x = ManiaExtensions.GetPositionX(KeyCount, Column + 1);
             int y = 192; // Standard y position for mania
             int type = 1; // Normal hit
 

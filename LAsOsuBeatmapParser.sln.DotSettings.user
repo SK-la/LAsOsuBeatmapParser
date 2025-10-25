@@ -1,11 +1,61 @@
 ﻿<wpf:ResourceDictionary xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:s="clr-namespace:System;assembly=mscorlib" xmlns:ss="urn:shemas-jetbrains-com:settings-storage-xaml" xmlns:wpf="http://schemas.microsoft.com/winfx/2006/xaml/presentation">
 	<s:String x:Key="/Default/CodeInspection/Highlighting/SweaWarningsMode/@EntryValue">DoNotShowAndRun</s:String>
-	<s:String x:Key="/Default/Environment/UnitTesting/UnitTestSessionStore/Sessions/=be4fa42f_002D84e7_002D4b98_002D8c2a_002D56b58c9d5b85/@EntryIndexedValue">&lt;SessionState ContinuousTestingMode="0" IsActive="True" Name="GetManiaBeatmap_ValidManiaBeatmap_ReturnsManiaBeatmap" xmlns="urn:schemas-jetbrains-com:jetbrains-ut-session"&gt;&#xD;
+	<s:String x:Key="/Default/Environment/UnitTesting/UnitTestSessionStore/Sessions/=08939892_002D6d63_002D44d8_002D93cd_002D7ac944a6723c/@EntryIndexedValue">&lt;SessionState ContinuousTestingMode="0" Name="ProductionCSRTests" xmlns="urn:schemas-jetbrains-com:jetbrains-ut-session"&gt;&#xD;
   &lt;TestAncestor&gt;&#xD;
-    &lt;TestId&gt;xUnit::87654321-4321-4321-4321-CBA987654321::net8.0::LAsOsuBeatmapParser.Tests.BeatmapDecoderTests.GetManiaBeatmap_ValidManiaBeatmap_ReturnsManiaBeatmap&lt;/TestId&gt;&#xD;
-    &lt;TestId&gt;xUnit::87654321-4321-4321-4321-CBA987654321::net8.0::LAsOsuBeatmapParser.Tests.BeatmapDecoderTests.Decode_ValidOsuFile_ReturnsBeatmap&lt;/TestId&gt;&#xD;
-    &lt;TestId&gt;xUnit::87654321-4321-4321-4321-CBA987654321::net8.0::LAsOsuBeatmapParser.Tests.BeatmapDecoderTests.Decode_RealOsuFile_PropertiesNotNull&lt;/TestId&gt;&#xD;
-    &lt;TestId&gt;xUnit::87654321-4321-4321-4321-CBA987654321::net8.0::LAsOsuBeatmapParser.Tests.BeatmapEncoderTests&lt;/TestId&gt;&#xD;
-    &lt;TestId&gt;xUnit::87654321-4321-4321-4321-CBA987654321::net8.0::LAsOsuBeatmapParser.Tests.SRCalculatorTests.RunDetailedPerformanceAnalysis&lt;/TestId&gt;&#xD;
+    &lt;TestId&gt;xUnit::87654321-4321-4321-4321-CBA987654321::net8.0::LAsOsuBeatmapParser.Tests.ProductionCSRTests&lt;/TestId&gt;&#xD;
+    &lt;TestId&gt;xUnit::87654321-4321-4321-4321-CBA987654321::net8.0::LAsOsuBeatmapParser.Tests.RustSRCalculatorTests&lt;/TestId&gt;&#xD;
+    &lt;TestId&gt;xUnit::87654321-4321-4321-4321-CBA987654321::net8.0::LAsOsuBeatmapParser.Tests.VersionCSRTests&lt;/TestId&gt;&#xD;
   &lt;/TestAncestor&gt;&#xD;
-&lt;/SessionState&gt;</s:String></wpf:ResourceDictionary>
+&lt;/SessionState&gt;</s:String>
+	<s:String x:Key="/Default/Environment/UnitTesting/UnitTestSessionStore/Sessions/=1b26aa0d_002D260a_002D4e16_002D8fb5_002Da39a82e70ea4/@EntryIndexedValue">&lt;SessionState ContinuousTestingMode="0" Name="SRCalculatorComparisonTests" xmlns="urn:schemas-jetbrains-com:jetbrains-ut-session"&gt;&#xD;
+  &lt;TestAncestor&gt;&#xD;
+    &lt;TestId&gt;xUnit::87654321-4321-4321-4321-CBA987654321::net8.0::LAsOsuBeatmapParser.Tests.SRCalculatorComparisonTests&lt;/TestId&gt;&#xD;
+  &lt;/TestAncestor&gt;&#xD;
+&lt;/SessionState&gt;</s:String>
+	<s:String x:Key="/Default/Environment/UnitTesting/UnitTestSessionStore/Sessions/=1b4f4e69_002D233a_002D45ec_002D8223_002D6f4e5cb01b01/@EntryIndexedValue">&lt;SessionState ContinuousTestingMode="0" IsActive="True" Name="ComparisonTests #4" xmlns="urn:schemas-jetbrains-com:jetbrains-ut-session"&gt;&#xD;
+  &lt;And&gt;&#xD;
+    &lt;TestAncestor&gt;&#xD;
+      &lt;TestId&gt;xUnit::87654321-4321-4321-4321-CBA987654321::net8.0::LAsOsuBeatmapParser.Tests.ComparisonTests&lt;/TestId&gt;&#xD;
+      &lt;TestId&gt;xUnit::87654321-4321-4321-4321-CBA987654321::net8.0::LAsOsuBeatmapParser.Tests.ProductionCSRTests&lt;/TestId&gt;&#xD;
+      &lt;TestId&gt;xUnit::87654321-4321-4321-4321-CBA987654321::net8.0::LAsOsuBeatmapParser.Tests.RustSRCalculatorTests&lt;/TestId&gt;&#xD;
+      &lt;TestId&gt;xUnit::87654321-4321-4321-4321-CBA987654321::net8.0::LAsOsuBeatmapParser.Tests.VersionCSRTests&lt;/TestId&gt;&#xD;
+      &lt;TestId&gt;xUnit::87654321-4321-4321-4321-CBA987654321::net8.0::LAsOsuBeatmapParser.Tests.BeatmapEncoderTests&lt;/TestId&gt;&#xD;
+    &lt;/TestAncestor&gt;&#xD;
+    &lt;Not&gt;&#xD;
+      &lt;TestAncestor&gt;&#xD;
+        &lt;TestId&gt;xUnit::87654321-4321-4321-4321-CBA987654321::net8.0::LAsOsuBeatmapParser.Tests.BeatmapEncoderTests&lt;/TestId&gt;&#xD;
+      &lt;/TestAncestor&gt;&#xD;
+    &lt;/Not&gt;&#xD;
+  &lt;/And&gt;&#xD;
+&lt;/SessionState&gt;</s:String>
+	<s:String x:Key="/Default/Environment/UnitTesting/UnitTestSessionStore/Sessions/=870cdd94_002D71ff_002D45ba_002D8986_002Dda207bf402b5/@EntryIndexedValue">&lt;SessionState ContinuousTestingMode="0" Name="ComparisonTests" xmlns="urn:schemas-jetbrains-com:jetbrains-ut-session"&gt;&#xD;
+  &lt;TestAncestor&gt;&#xD;
+    &lt;TestId&gt;xUnit::87654321-4321-4321-4321-CBA987654321::net8.0::LAsOsuBeatmapParser.Tests.ComparisonTests&lt;/TestId&gt;&#xD;
+    &lt;TestId&gt;xUnit::87654321-4321-4321-4321-CBA987654321::net8.0::LAsOsuBeatmapParser.Tests.ProductionCSRTests&lt;/TestId&gt;&#xD;
+    &lt;TestId&gt;xUnit::87654321-4321-4321-4321-CBA987654321::net8.0::LAsOsuBeatmapParser.Tests.RustSRCalculatorTests&lt;/TestId&gt;&#xD;
+    &lt;TestId&gt;xUnit::87654321-4321-4321-4321-CBA987654321::net8.0::LAsOsuBeatmapParser.Tests.VersionCSRTests&lt;/TestId&gt;&#xD;
+  &lt;/TestAncestor&gt;&#xD;
+&lt;/SessionState&gt;</s:String>
+	<s:String x:Key="/Default/Environment/UnitTesting/UnitTestSessionStore/Sessions/=9b6072a8_002D66a6_002D45a3_002D809b_002D996bcb68bf5b/@EntryIndexedValue">&lt;SessionState ContinuousTestingMode="0" Name="ComparisonTests #3" xmlns="urn:schemas-jetbrains-com:jetbrains-ut-session"&gt;&#xD;
+  &lt;TestAncestor&gt;&#xD;
+    &lt;TestId&gt;xUnit::87654321-4321-4321-4321-CBA987654321::net8.0::LAsOsuBeatmapParser.Tests.ComparisonTests&lt;/TestId&gt;&#xD;
+    &lt;TestId&gt;xUnit::87654321-4321-4321-4321-CBA987654321::net8.0::LAsOsuBeatmapParser.Tests.ProductionCSRTests&lt;/TestId&gt;&#xD;
+    &lt;TestId&gt;xUnit::87654321-4321-4321-4321-CBA987654321::net8.0::LAsOsuBeatmapParser.Tests.RustSRCalculatorTests&lt;/TestId&gt;&#xD;
+    &lt;TestId&gt;xUnit::87654321-4321-4321-4321-CBA987654321::net8.0::LAsOsuBeatmapParser.Tests.VersionCSRTests&lt;/TestId&gt;&#xD;
+  &lt;/TestAncestor&gt;&#xD;
+&lt;/SessionState&gt;</s:String>
+	<s:String x:Key="/Default/Environment/UnitTesting/UnitTestSessionStore/Sessions/=cedb35a5_002D6f68_002D4ffa_002D8cdc_002D781c2ff3f1e3/@EntryIndexedValue">&lt;SessionState ContinuousTestingMode="0" Name="ComparisonTests #2" xmlns="urn:schemas-jetbrains-com:jetbrains-ut-session"&gt;&#xD;
+  &lt;TestAncestor&gt;&#xD;
+    &lt;TestId&gt;xUnit::87654321-4321-4321-4321-CBA987654321::net8.0::LAsOsuBeatmapParser.Tests.ComparisonTests&lt;/TestId&gt;&#xD;
+    &lt;TestId&gt;xUnit::87654321-4321-4321-4321-CBA987654321::net8.0::LAsOsuBeatmapParser.Tests.ProductionCSRTests&lt;/TestId&gt;&#xD;
+    &lt;TestId&gt;xUnit::87654321-4321-4321-4321-CBA987654321::net8.0::LAsOsuBeatmapParser.Tests.RustSRCalculatorTests&lt;/TestId&gt;&#xD;
+    &lt;TestId&gt;xUnit::87654321-4321-4321-4321-CBA987654321::net8.0::LAsOsuBeatmapParser.Tests.VersionCSRTests&lt;/TestId&gt;&#xD;
+  &lt;/TestAncestor&gt;&#xD;
+&lt;/SessionState&gt;</s:String>
+	
+	
+	
+	
+	
+	
+	</wpf:ResourceDictionary>

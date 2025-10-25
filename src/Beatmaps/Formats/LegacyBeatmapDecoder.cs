@@ -555,10 +555,9 @@ namespace LAsOsuBeatmapParser.Beatmaps.Formats
             if (float.TryParse(parts[0], out float xPos))
             {
                 // 对于 Mania，x 位置决定音符所在列
-                // 使用官方的坐标转换公式：column = floor(x / (512 / keyCount))
+                // 使用新的坐标转换公式
                 int keyCount = (int)beatmap.Difficulty.CircleSize;
-                float ratio = 512f / keyCount;
-                hold.Column = (int)(xPos / ratio);
+                hold.Column = ManiaExtensions.GetColumnFromX(keyCount, xPos);
                 hold.KeyCount = keyCount;
             }
 
@@ -580,10 +579,8 @@ namespace LAsOsuBeatmapParser.Beatmaps.Formats
             {
                 int keyCount = (int)beatmap.Difficulty.CircleSize;
 
-                // 标准格式：calculate column from x position
-                // 使用官方的坐标转换公式：column = floor(x / (512 / keyCount))
-                float ratio = 512f / keyCount;
-                maniaHit.Column = (int)(xPos / ratio);
+                // 使用新的坐标转换公式
+                maniaHit.Column = ManiaExtensions.GetColumnFromX(keyCount, xPos);
 
                 maniaHit.KeyCount = keyCount;
             }

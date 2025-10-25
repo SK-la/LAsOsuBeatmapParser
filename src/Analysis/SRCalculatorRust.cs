@@ -5,6 +5,10 @@ using System;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.IO;
+using System.Collections.Generic;
+using System.Linq;
+using LAsOsuBeatmapParser.Beatmaps;
+using LAsOsuBeatmapParser.Extensions;
 
 namespace LAsOsuBeatmapParser.Analysis
 {
@@ -12,8 +16,35 @@ namespace LAsOsuBeatmapParser.Analysis
     {
         private const string DllName = "rust_sr_calculator.dll";
 
+        // C-compatible structures matching Rust definitions
+        [StructLayout(LayoutKind.Sequential)]
+        public struct CHitObject
+        {
+            public int col;
+            public int start_time;
+            public int end_time;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct CBeatmapData
+        {
+            public double overall_difficulty;
+            public double circle_size;
+            public UIntPtr hit_objects_count; // usize in Rust
+            public IntPtr hit_objects_ptr; // *const CHitObject in Rust
+        }
+
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true, CharSet = CharSet.Ansi)]
         private static extern IntPtr calculate_sr_from_osu_file(IntPtr pathPtr, UIntPtr len);
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true, CharSet = CharSet.Ansi)]
+        private static extern IntPtr calculate_sr_from_osu_content(IntPtr contentPtr, UIntPtr len);
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true, CharSet = CharSet.Ansi)]
+        private static extern IntPtr calculate_sr_from_json(IntPtr jsonPtr, UIntPtr len);
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        private static extern double calculate_sr_from_struct(CBeatmapData data);
 
         public static double? CalculateSR(string filePath)
         {
@@ -36,8 +67,9 @@ namespace LAsOsuBeatmapParser.Analysis
                 string resultJson = Marshal.PtrToStringUTF8(resultPtr)!;
                 Marshal.FreeHGlobal(resultPtr);
 
-                var result = JsonSerializer.Deserialize<JsonElement>(resultJson);
-                if (result.TryGetProperty("sr", out JsonElement srElement) && srElement.ValueKind == JsonValueKind.Number)
+                using var doc = JsonDocument.Parse(resultJson);
+                var root = doc.RootElement;
+                if (root.TryGetProperty("sr", out JsonElement srElement) && srElement.ValueKind == JsonValueKind.Number)
                     return srElement.GetDouble();
             }
             catch (Exception)
@@ -47,6 +79,184 @@ namespace LAsOsuBeatmapParser.Analysis
             }
 
             return null;
+        }
+
+        public static (double? sr, List<(int col, int start, int end)>? notes) CalculateSRWithNotes(string filePath)
+        {
+            if (string.IsNullOrEmpty(filePath))
+                return (null, null);
+
+            try
+            {
+                byte[] pathBytes = System.Text.Encoding.UTF8.GetBytes(filePath);
+                IntPtr pathPtr = Marshal.AllocHGlobal(pathBytes.Length);
+                Marshal.Copy(pathBytes, 0, pathPtr, pathBytes.Length);
+
+                IntPtr resultPtr = calculate_sr_from_osu_file(pathPtr, (UIntPtr)pathBytes.Length);
+
+                Marshal.FreeHGlobal(pathPtr);
+
+                if (resultPtr == IntPtr.Zero)
+                    return (null, null);
+
+                string resultJson = Marshal.PtrToStringUTF8(resultPtr)!;
+                Marshal.FreeHGlobal(resultPtr);
+
+                // Debug: print the JSON
+                Console.WriteLine($"Rust JSON length: {resultJson.Length}");
+                Console.WriteLine($"Rust JSON: {resultJson}");
+
+                using var doc = JsonDocument.Parse(resultJson);
+                var root = doc.RootElement;
+                double? sr = null;
+                if (root.TryGetProperty("sr", out JsonElement srElement) && srElement.ValueKind == JsonValueKind.Number)
+                    sr = srElement.GetDouble();
+
+                List<(int, int, int)>? notes = null;
+                if (root.TryGetProperty("notes", out JsonElement notesElement) && notesElement.ValueKind == JsonValueKind.Array)
+                {
+                    notes = new List<(int, int, int)>();
+                    foreach (var note in notesElement.EnumerateArray())
+                    {
+                        if (note.TryGetProperty("col", out var col) && col.ValueKind == JsonValueKind.Number &&
+                            note.TryGetProperty("start", out var start) && start.ValueKind == JsonValueKind.Number &&
+                            note.TryGetProperty("end", out var end) && end.ValueKind == JsonValueKind.Number)
+                        {
+                            notes.Add((col.GetInt32(), start.GetInt32(), end.GetInt32()));
+                        }
+                    }
+                }
+
+                return (sr, notes);
+            }
+            catch (Exception)
+            {
+                // Return null on any error (including Rust panics)
+                return (null, null);
+            }
+        }
+
+        public static double? CalculateSR_FromFile(string filePath)
+        {
+            return CalculateSR(filePath);
+        }
+
+        public static double? CalculateSR_FromContent(string content)
+        {
+            if (string.IsNullOrEmpty(content))
+                return null;
+
+            try
+            {
+                byte[] contentBytes = System.Text.Encoding.UTF8.GetBytes(content);
+                IntPtr contentPtr = Marshal.AllocHGlobal(contentBytes.Length);
+                Marshal.Copy(contentBytes, 0, contentPtr, contentBytes.Length);
+
+                IntPtr resultPtr = calculate_sr_from_osu_content(contentPtr, (UIntPtr)contentBytes.Length);
+
+                Marshal.FreeHGlobal(contentPtr);
+
+                if (resultPtr == IntPtr.Zero)
+                    return null;
+
+                string resultJson = Marshal.PtrToStringUTF8(resultPtr)!;
+                Marshal.FreeHGlobal(resultPtr);
+
+                using var doc = JsonDocument.Parse(resultJson);
+                var root = doc.RootElement;
+                if (root.TryGetProperty("sr", out JsonElement srElement) && srElement.ValueKind == JsonValueKind.Number)
+                    return srElement.GetDouble();
+            }
+            catch (Exception)
+            {
+                return null;
+            }
+
+            return null;
+        }
+
+        public static double? CalculateSR_FromJson(string json)
+        {
+            if (string.IsNullOrEmpty(json))
+                return null;
+
+            try
+            {
+                byte[] jsonBytes = System.Text.Encoding.UTF8.GetBytes(json);
+                IntPtr jsonPtr = Marshal.AllocHGlobal(jsonBytes.Length);
+                Marshal.Copy(jsonBytes, 0, jsonPtr, jsonBytes.Length);
+
+                IntPtr resultPtr = calculate_sr_from_json(jsonPtr, (UIntPtr)jsonBytes.Length);
+
+                Marshal.FreeHGlobal(jsonPtr);
+
+                if (resultPtr == IntPtr.Zero)
+                    return null;
+
+                string resultJson = Marshal.PtrToStringUTF8(resultPtr)!;
+                Marshal.FreeHGlobal(resultPtr);
+
+                using var doc = JsonDocument.Parse(resultJson);
+                var root = doc.RootElement;
+                if (root.TryGetProperty("sr", out JsonElement srElement) && srElement.ValueKind == JsonValueKind.Number)
+                    return srElement.GetDouble();
+            }
+            catch (Exception)
+            {
+                return null;
+            }
+
+            return null;
+        }
+
+        public static double CalculateSR_FromStruct(CBeatmapData data)
+        {
+            return calculate_sr_from_struct(data);
+        }
+
+        public static string ConvertBeatmapToJson(LAsOsuBeatmapParser.Beatmaps.Beatmap beatmap)
+        {
+            var jsonBeatmap = new
+            {
+                difficulty_section = new
+                {
+                    overall_difficulty = beatmap.BeatmapInfo.Difficulty.OverallDifficulty,
+                    circle_size = beatmap.BeatmapInfo.Difficulty.CircleSize
+                },
+                hit_objects = beatmap.HitObjects.Select(ho => new
+                {
+                    position = new { x = ho.Position.X, y = ho.Position.Y },
+                    start_time = ho.StartTime,
+                    end_time = ho.EndTime
+                })
+            };
+
+            var options = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+            return JsonSerializer.Serialize(jsonBeatmap, options);
+        }
+
+        public static CBeatmapData ConvertBeatmapToStruct(LAsOsuBeatmapParser.Beatmaps.Beatmap beatmap)
+        {
+            var hitObjects = beatmap.HitObjects.Select(ho => new CHitObject
+            {
+                col = ho is ManiaHitObject mania ? mania.Column : 0,
+                start_time = (int)ho.StartTime,
+                end_time = (int)ho.EndTime
+            }).ToArray();
+
+            IntPtr hitObjectsPtr = Marshal.AllocHGlobal(Marshal.SizeOf<CHitObject>() * hitObjects.Length);
+            for (int i = 0; i < hitObjects.Length; i++)
+            {
+                Marshal.StructureToPtr(hitObjects[i], hitObjectsPtr + i * Marshal.SizeOf<CHitObject>(), false);
+            }
+
+            return new CBeatmapData
+            {
+                overall_difficulty = beatmap.BeatmapInfo.Difficulty.OverallDifficulty,
+                circle_size = beatmap.BeatmapInfo.Difficulty.CircleSize,
+                hit_objects_count = (UIntPtr)hitObjects.Length,
+                hit_objects_ptr = hitObjectsPtr
+            };
         }
     }
 }
