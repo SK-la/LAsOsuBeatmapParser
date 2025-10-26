@@ -14,7 +14,7 @@ namespace LAsOsuBeatmapParser.Analysis
         /// </summary>
         private static readonly double[][] CrossMatrices =
         [
-            [-1],
+            [-1], // CS=0
             [0.075, 0.075],
             [0.125, 0.05, 0.125],
             [0.125, 0.125, 0.125, 0.125],
