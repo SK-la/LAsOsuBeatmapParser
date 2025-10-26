@@ -7,7 +7,7 @@ impl CrossMatrixProvider {
         if k < 1 || k > Self::MATRICES.len() {
             return None;
         }
-        Self::MATRICES.get(k - 1).and_then(|opt| *opt)
+        Self::MATRICES.get(k).and_then(|opt| *opt)
     }
 
     /// 检查指定的键数是否受支持

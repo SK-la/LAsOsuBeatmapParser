@@ -1,9 +1,12 @@
 use std::cmp::Ordering;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Note {
+    // 序号(从0开始，0-17)
     pub k: i32,
+    // 按键时间(毫秒)
     pub h: i32,
+    // 释放时间(毫秒)，若为短按则为-1
     pub t: i32,
 }
 

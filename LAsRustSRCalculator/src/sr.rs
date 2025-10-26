@@ -1,36 +1,8 @@
 use rayon::prelude::*;
-use serde::{Deserialize, Serialize};
-use serde_json::json;
-use std::collections::HashMap;
-use std::fs;
-use std::path::Path;
 
 use crate::note::{Note, NoteComparerByT};
 use crate::cross_matrix::CrossMatrixProvider;
-
-#[derive(Serialize, Deserialize)]
-pub struct Beatmap {
-    pub difficulty_section: DifficultySection,
-    pub hit_objects: Vec<HitObject>,
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct DifficultySection {
-    pub overall_difficulty: f64,
-    pub circle_size: f64,
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct HitObject {
-    pub position: Position,
-    pub start_time: i32,
-    pub end_time: i32,
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct Position {
-    pub x: f64,
-}
+use crate::parser::ParsedData;
 
 pub struct SRCalculator;
 
@@ -46,34 +18,19 @@ impl SRCalculator {
     const P_0: f64 = 1.0;
     const GRANULARITY: i32 = 1;
 
-    pub fn calculate_sr(beatmap: &Beatmap) -> Result<f64, String> {
-        let od = beatmap.difficulty_section.overall_difficulty;
-        let k = beatmap.difficulty_section.circle_size as i32;
+    pub fn calculate_sr_from_parsed_data(data: &ParsedData) -> Result<f64, String> {
+        let od = data.od;
+        let k = data.column_count;
 
         if k > 18 || k < 1 || (k > 10 && k % 2 == 1) {
             return Err("Unsupported key count".to_string());
         }
 
-        let mut note_sequence: Vec<Note> = beatmap
-            .hit_objects
-            .iter()
-            .map(|ho| {
-                let col = ho.position.x as i32; // Since we set position.x = col
-                let mut time = ho.start_time;
-                let mut tail = if ho.end_time > ho.start_time {
-                    ho.end_time
-                } else {
-                    -1
-                };
-                if time < 0 {
-                    time = 0;
-                }
-                if tail < -1 {
-                    tail = -1;
-                }
-                Note::new(col, time, tail)
-            })
-            .collect();
+        let mut note_sequence: Vec<Note> = data.columns.iter().enumerate().map(|(i, &col)| {
+            let h = data.note_starts[i];
+            let t = if data.note_types[i] == 128 { data.note_ends[i] } else { -1 };
+            Note::new(col, h, t)
+        }).collect();
 
         if note_sequence.is_empty() {
             return Ok(0.0);
@@ -81,8 +38,8 @@ impl SRCalculator {
 
         note_sequence.sort();
 
-        let mut x = 0.3 * ((64.5 - (od * 3.0).ceil()) / 500.0).sqrt();
-        x = x.min(0.6 * (x - 0.09) + 0.09);
+        let x: f64 = 0.3 * ((64.5 - (od * 3.0).ceil()) / 500.0).sqrt();
+        let x = x.min(0.6 * (x - 0.09) + 0.09);
 
         let mut note_seq_by_column: Vec<Vec<Note>> = vec![vec![]; k as usize];
         for note in &note_sequence {
@@ -95,11 +52,6 @@ impl SRCalculator {
         let mut ln_seq_sorted = ln_seq.clone();
         ln_seq_sorted.sort_by(NoteComparerByT::cmp);
 
-        let mut ln_dict: HashMap<i32, Vec<Note>> = HashMap::new();
-        for note in &ln_seq_sorted {
-            ln_dict.entry(note.k).or_insert(vec![]).push(*note);
-        }
-
         let t = note_sequence
             .iter()
             .map(|n| n.h)
@@ -110,130 +62,64 @@ impl SRCalculator {
 
         let t = if t > 1000000 { 1000000 } else { t };
 
-        // Parallel computation of sections
-        let (j_bar, delta_ks) = Self::calculate_section_23(k, &note_seq_by_column, t, x);
-        let x_bar = Self::calculate_section_24(k, t, &note_seq_by_column, x);
-        let p_bar = Self::calculate_section_25(t, &ln_seq_sorted, &note_sequence, x);
+        let base_corners = Self::get_uniform_corners(t as f64);
 
-        let (a_bar, ks): (Vec<f64>, Vec<i32>) =
-            Self::calculate_section_26(&delta_ks, k, t, &note_sequence);
-        let (r_bar, _): (Vec<f64>, Vec<f64>) =
-            Self::calculate_section_27(&ln_seq_sorted, &ln_seq_sorted, t, &note_seq_by_column, x);
+        let key_usage = Self::get_key_usage(k, t, &note_sequence, &base_corners);
+        let _active_columns: Vec<Vec<usize>> = (0..base_corners.len())
+            .map(|i| (0..k as usize).filter(|&col| key_usage[col][i]).collect())
+            .collect();
 
-        let result = Self::calculate_section_3(
-            j_bar,
-            x_bar,
-            p_bar,
-            a_bar,
-            r_bar,
-            ks,
-            t,
+        let key_usage_400 = Self::get_key_usage_400(k, t, &note_sequence, &base_corners);
+        let _anchor = Self::compute_anchor(k, &key_usage_400, &base_corners);
+
+        let (j_bar, delta_ks) = Self::calculate_section_23(k, &note_seq_by_column, &base_corners, x);
+        let j_bar_interp = j_bar.clone(); // No interpolation needed for uniform grid
+
+        let x_bar = Self::calculate_section_24(k, &base_corners, &note_seq_by_column, x);
+        let x_bar_interp = x_bar.clone(); // No interpolation needed for uniform grid
+
+        let _ln_rep = Self::ln_bodies_count_sparse_representation(&ln_seq, t);
+
+        let p_bar = Self::calculate_section_25(&base_corners, &ln_seq_sorted, &note_sequence, x);
+        let p_bar_interp = p_bar.clone(); // No interpolation needed for uniform grid
+
+        let (a_bar, _ks) = Self::calculate_section_26(&delta_ks, k, &base_corners, &note_sequence);
+        let a_bar_interp = a_bar.clone(); // No interpolation needed for uniform grid
+
+        let tail_seq: Vec<Note> = ln_seq_sorted.iter().cloned().collect();
+        let (r_bar, _) = Self::calculate_section_27(&ln_seq, &tail_seq, &base_corners, &note_seq_by_column, x);
+        let r_bar_interp = r_bar.clone(); // No interpolation needed for uniform grid
+
+        let (c_arr, ks_arr) = Self::compute_c_and_ks(k, t, &note_sequence, &key_usage, &base_corners);
+        let mut c_arr_interp = c_arr.clone(); // No interpolation needed for uniform grid
+        let ks_arr_f64: Vec<f64> = ks_arr.iter().map(|&x| x as f64).collect();
+        let ks_arr_interp = ks_arr_f64.clone(); // No interpolation needed for uniform grid
+
+        let sr = Self::calculate_final_sr(
+            &j_bar_interp,
+            &x_bar_interp,
+            &p_bar_interp,
+            &a_bar_interp,
+            &r_bar_interp,
+            &ks_arr_interp,
+            &mut c_arr_interp,
+            &base_corners,
             &note_sequence,
             &ln_seq_sorted,
         );
 
-        Ok(result)
+        Ok(sr)
     }
 
-    pub fn calculate_sr_from_data(data: &SRData) -> Result<f64, String> {
-        let od = data.overall_difficulty;
-        let k = data.circle_size as i32;
-
-        if k > 18 || k < 1 || (k > 10 && k % 2 == 1) {
-            return Err("Unsupported key count".to_string());
-        }
-
-        let mut note_sequence: Vec<Note> = data
-            .hit_objects
-            .iter()
-            .map(|ho| {
-                let col = ho.position.x as i32;
-                let mut time = ho.start_time;
-                let mut tail = ho.end_time;
-                if tail <= time {
-                    tail = -1;
-                }
-                if tail == -1 {
-                    tail = time;
-                }
-                if time < 0 {
-                    time = 0;
-                }
-                if tail < -1 {
-                    tail = -1;
-                }
-                Note::new(col, time, tail)
-            })
-            .collect();
-
-        if note_sequence.is_empty() {
-            return Ok(0.0);
-        }
-
-        note_sequence.sort();
-
-        let mut x = 0.3 * ((64.5 - (od * 3.0).ceil()) / 500.0).sqrt();
-        x = x.min(0.6 * (x - 0.09) + 0.09);
-
-        // Build note_seq_by_column more efficiently
-        let mut note_seq_by_column: Vec<Vec<Note>> = vec![vec![]; k as usize];
-        for note in &note_sequence {
-            if note.k >= 0 && (note.k as usize) < note_seq_by_column.len() {
-                note_seq_by_column[note.k as usize].push(*note);
-            }
-        }
-
-        // Filter LN notes in one pass
-        let mut ln_seq: Vec<Note> = note_sequence.iter().filter(|n| n.t != n.h).cloned().collect();
-        ln_seq.sort_by(NoteComparerByT::cmp);
-
-        // Calculate t more efficiently
-        let mut max_h = 0;
-        let mut max_t = 0;
-        for note in &note_sequence {
-            if note.h > max_h {
-                max_h = note.h;
-            }
-            if note.t > max_t {
-                max_t = note.t;
-            }
-        }
-        let t = max_h.max(max_t) + 1;
-        let t = if t > 1000000 { 1000000 } else { t };
-
-        // Parallel computation of sections
-        let (j_bar, delta_ks) = Self::calculate_section_23(k, &note_seq_by_column, t, x);
-        let x_bar = Self::calculate_section_24(k, t, &note_seq_by_column, x);
-        let p_bar = Self::calculate_section_25(t, &ln_seq, &note_sequence, x);
-
-        let (a_bar, ks): (Vec<f64>, Vec<i32>) =
-            Self::calculate_section_26(&delta_ks, k, t, &note_sequence);
-        let (r_bar, _): (Vec<f64>, Vec<f64>) =
-            Self::calculate_section_27(&ln_seq, &ln_seq, t, &note_seq_by_column, x);
-
-        let result = Self::calculate_section_3(
-            j_bar,
-            x_bar,
-            p_bar,
-            a_bar,
-            r_bar,
-            ks,
-            t,
-            &note_sequence,
-            &ln_seq,
-        );
-
-        Ok(result)
-    }
-
-    fn calculate_section_23(
+    pub fn calculate_section_23(
         k: i32,
         note_seq_by_column: &[Vec<Note>],
-        t: i32,
+        base_corners: &[f64],
         x: f64,
     ) -> (Vec<f64>, Vec<Vec<f64>>) {
-        let mut j_ks: Vec<Vec<f64>> = vec![vec![0.0; t as usize]; k as usize];
-        let mut delta_ks: Vec<Vec<f64>> = vec![vec![1e9; t as usize]; k as usize];
+        let grid_size = base_corners.len();
+        let mut j_ks: Vec<Vec<f64>> = vec![vec![0.0; grid_size]; k as usize];
+        let mut delta_ks: Vec<Vec<f64>> = vec![vec![1e9; grid_size]; k as usize];
 
         let x_pow_025 = x.sqrt().sqrt();
         let lambda1_x = Self::LAMBDA_1 * x_pow_025;
@@ -263,10 +149,10 @@ impl SRCalculator {
             }
         });
 
-        let j_bar_ks: Vec<Vec<f64>> = j_ks.iter().map(|jk| Self::smooth(jk, t)).collect();
+        let j_bar_ks: Vec<Vec<f64>> = j_ks.iter().map(|jk| Self::smooth(jk, grid_size as i32)).collect();
 
-        let mut j_bar = vec![0.0; t as usize];
-        for s in (0..t as usize).step_by(Self::GRANULARITY as usize) {
+        let mut j_bar = vec![0.0; grid_size];
+        for s in (0..grid_size).step_by(Self::GRANULARITY as usize) {
             let mut weighted_sum = 0.0;
             let mut weight_sum = 0.0;
             for i in 0..k as usize {
@@ -282,8 +168,9 @@ impl SRCalculator {
         (j_bar, delta_ks)
     }
 
-    fn calculate_section_24(k: i32, t: i32, note_seq_by_column: &[Vec<Note>], x: f64) -> Vec<f64> {
-        let mut x_ks: Vec<Vec<f64>> = vec![vec![0.0; t as usize]; (k + 1) as usize];
+    pub fn calculate_section_24(k: i32, base_corners: &[f64], note_seq_by_column: &[Vec<Note>], x: f64) -> Vec<f64> {
+        let grid_size = base_corners.len();
+        let mut x_ks: Vec<Vec<f64>> = vec![vec![0.0; grid_size]; (k + 1) as usize];
 
         for k_idx in 0..=(k as usize) {
             let notes_in_pair = if k_idx == 0 {
@@ -321,30 +208,31 @@ impl SRCalculator {
             }
         }
 
-        let mut x_arr = vec![0.0; t as usize];
-        for s in (0..t as usize).step_by(Self::GRANULARITY as usize) {
+        let mut x_arr = vec![0.0; grid_size];
+        for s in (0..grid_size).step_by(Self::GRANULARITY as usize) {
             x_arr[s] = 0.0;
             for k_idx in 0..=(k as usize) {
                 x_arr[s] += x_ks[k_idx][s] * CrossMatrixProvider::get_matrix(k as usize).unwrap()[k_idx];
             }
         }
 
-        Self::smooth(&x_arr, t)
+        Self::smooth(&x_arr, grid_size as i32)
     }
 
-    fn calculate_section_25(t: i32, ln_seq: &[Note], note_seq: &[Note], x: f64) -> Vec<f64> {
-        let mut p = vec![0.0; t as usize];
-        let mut ln_bodies = vec![0.0; t as usize];
+    pub fn calculate_section_25(base_corners: &[f64], ln_seq: &[Note], note_seq: &[Note], x: f64) -> Vec<f64> {
+        let grid_size = base_corners.len();
+        let mut p = vec![0.0; grid_size];
+        let mut ln_bodies = vec![0.0; grid_size];
 
         ln_seq.par_iter().for_each(|note| {
             let t1 = (note.h + 80).min(note.t);
             for time in note.h..t1 {
-                if time >= 0 && time < t {
+                if time >= 0 && (time as usize) < grid_size {
                     // Atomic add would be needed for thread safety, but for simplicity using sequential
                 }
             }
             for time in t1..note.t {
-                if time >= 0 && time < t {
+                if time >= 0 && (time as usize) < grid_size {
                     // Same issue
                 }
             }
@@ -365,8 +253,8 @@ impl SRCalculator {
             }
         }
 
-        let mut prefix_sum_ln_bodies = vec![0.0; (t + 1) as usize];
-        for i in 1..=(t as usize) {
+        let mut prefix_sum_ln_bodies = vec![0.0; grid_size + 1];
+        for i in 1..=grid_size {
             prefix_sum_ln_bodies[i] = prefix_sum_ln_bodies[i - 1] + ln_bodies[i - 1];
         }
 
@@ -420,27 +308,28 @@ impl SRCalculator {
             }
         }
 
-        Self::smooth(&p, t)
+        Self::smooth(&p, grid_size as i32)
     }
 
-    fn calculate_section_26(
+    pub fn calculate_section_26(
         delta_ks: &[Vec<f64>],
         k: i32,
-        t: i32,
+        base_corners: &[f64],
         note_seq: &[Note],
     ) -> (Vec<f64>, Vec<i32>) {
-        if delta_ks.is_empty() || k <= 0 || t <= 0 {
-            return (vec![1.0; t.max(1) as usize], vec![1i32; t.max(1) as usize]);
+        let grid_size = base_corners.len();
+        if delta_ks.is_empty() || k <= 0 || grid_size == 0 {
+            return (vec![1.0; grid_size], vec![1i32; grid_size]);
         }
-        let mut ku_ks: Vec<Vec<bool>> = vec![vec![false; t as usize]; k as usize];
+        let mut ku_ks: Vec<Vec<bool>> = vec![vec![false; grid_size]; k as usize];
 
         // Sequential processing for ku_ks
         for note in note_seq {
             let start_time = (note.h - 500).max(0) as usize;
             let end_time = if note.t < 0 {
-                (note.h + 500).min(t - 1) as usize
+                (note.h + 500).min((grid_size - 1) as i32) as usize
             } else {
-                (note.t + 500).min(t - 1) as usize
+                (note.t + 500).min((grid_size - 1) as i32) as usize
             };
             for s in start_time..end_time {
                 if note.k >= 0
@@ -452,12 +341,12 @@ impl SRCalculator {
             }
         }
 
-        let mut ks = vec![0i32; t as usize];
-        let mut a = vec![1.0; t as usize];
+        let mut ks = vec![0i32; grid_size];
+        let mut a = vec![1.0; grid_size];
 
-        let mut dks: Vec<Vec<f64>> = vec![vec![0.0; t as usize]; k as usize];
+        let mut dks: Vec<Vec<f64>> = vec![vec![0.0; grid_size]; k as usize];
 
-        for s in (0..t as usize).step_by(Self::GRANULARITY as usize) {
+        for s in (0..grid_size).step_by(Self::GRANULARITY as usize) {
             let mut cols = vec![];
             for k_idx in 0..k as usize {
                 if ku_ks[k_idx][s] {
@@ -491,14 +380,14 @@ impl SRCalculator {
             }
         }
 
-        let a_bar = Self::smooth(&a, t);
+        let a_bar = Self::smooth(&a, grid_size as i32);
         (a_bar, ks)
     }
 
-    fn calculate_section_27(
+    pub fn calculate_section_27(
         ln_seq: &[Note],
         tail_seq: &[Note],
-        t: i32,
+        base_corners: &[f64],
         note_seq_by_column: &[Vec<Note>],
         x: f64,
     ) -> (Vec<f64>, Vec<f64>) {
@@ -521,8 +410,9 @@ impl SRCalculator {
             *i_val = 2.0 / (2.0 + (-5.0 * (i_h - 0.75)).exp() + (-5.0 * (i_t - 0.75)).exp());
         });
 
-        let mut is_arr = vec![0.0; t as usize];
-        let mut r = vec![0.0; t as usize];
+        let grid_size = base_corners.len();
+        let mut is_arr = vec![0.0; grid_size];
+        let mut r = vec![0.0; grid_size];
 
         for i in 0..tail_seq.len().saturating_sub(1) {
             let delta_r = 0.001 * (tail_seq[i + 1].t - tail_seq[i].t) as f64;
@@ -544,7 +434,7 @@ impl SRCalculator {
             }
         }
 
-        let r_bar = Self::smooth(&r, t);
+        let r_bar = Self::smooth(&r, grid_size as i32);
         (r_bar, is_arr)
     }
 
@@ -558,7 +448,7 @@ impl SRCalculator {
         }
     }
 
-    fn calculate_section_3(
+    pub fn calculate_section_3(
         j_bar: Vec<f64>,
         x_bar: Vec<f64>,
         p_bar: Vec<f64>,
@@ -607,6 +497,7 @@ impl SRCalculator {
             d[time] = Self::W_1 * s[time].powf(0.5) * t_t.powf(Self::P_1) + s[time] * Self::W_2;
         }
 
+        let mut c = c.to_vec();
         Self::forward_fill(&mut d);
         Self::forward_fill(&mut c);
 
@@ -704,270 +595,251 @@ impl SRCalculator {
             9.0 + (sr - 9.0) * (1.0 / 1.2)
         }
     }
-}
 
-#[no_mangle]
-pub extern "C" fn calculate_sr_from_json(json_ptr: *const u8, len: usize) -> *mut u8 {
-    // FFI interface for C#
-    let json_bytes = unsafe { std::slice::from_raw_parts(json_ptr, len) };
-
-    let json_str = match std::str::from_utf8(json_bytes) {
-        Ok(s) => s,
-        Err(_) => return std::ptr::null_mut(),
-    };
-
-    let beatmap: Beatmap = match serde_json::from_str(json_str) {
-        Ok(b) => b,
-        Err(_) => return std::ptr::null_mut(),
-    };
-
-    let sr = match SRCalculator::calculate_sr(&beatmap) {
-        Ok(s) => s,
-        Err(_) => return std::ptr::null_mut(),
-    };
-
-    let result = json!({ "sr": sr });
-    let result_str = result.to_string();
-    let c_str = std::ffi::CString::new(result_str).unwrap();
-    c_str.into_raw() as *mut u8
-}
-
-#[repr(C)]
-pub struct CHitObject {
-    pub col: i32,
-    pub start_time: i32,
-    pub end_time: i32,
-}
-
-#[repr(C)]
-pub struct CBeatmapData {
-    pub overall_difficulty: f64,
-    pub circle_size: f64,
-    pub hit_objects_count: usize,
-    pub hit_objects_ptr: *const CHitObject,
-}
-
-#[no_mangle]
-pub extern "C" fn calculate_sr_from_struct(data: *const CBeatmapData) -> f64 {
-    if data.is_null() {
-        return -1.0;
+    pub fn get_uniform_corners(t: f64) -> Vec<f64> {
+        let mut corners = Vec::new();
+        let mut current = 0.0;
+        while current < t {
+            corners.push(current);
+            current += 1.0;
+        }
+        corners
     }
 
-    let c_data = unsafe { &*data };
-
-    // Convert C structures to Rust structures
-    let hit_objects: Vec<HitObject> =
-        unsafe { std::slice::from_raw_parts(c_data.hit_objects_ptr, c_data.hit_objects_count) }
-            .iter()
-            .map(|ho| HitObject {
-                position: Position { x: ho.col as f64 }, // Use col as x for compatibility, but actually use col directly
-                start_time: ho.start_time,
-                end_time: ho.end_time,
-            })
-            .collect();
-
-    let beatmap = Beatmap {
-        difficulty_section: DifficultySection {
-            overall_difficulty: c_data.overall_difficulty,
-            circle_size: c_data.circle_size,
-        },
-        hit_objects,
-    };
-
-    SRCalculator::calculate_sr(&beatmap).unwrap_or_else(|_| -1.0)
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct SRData {
-    pub overall_difficulty: f64,
-    pub circle_size: f64,
-    pub hit_objects: Vec<HitObject>,
-}
-
-impl SRData {
-    pub fn from_osu_content(content: &str) -> Result<Self, String> {
-        let mut overall_difficulty = 0.0;
-        let mut circle_size = 0.0;
-        let mut hit_objects = Vec::new();
-        let mut in_difficulty_section = false;
-        let mut in_hit_objects_section = false;
-
-        for line in content.lines() {
-            let line = line.trim();
-            if line.is_empty() || line.starts_with("//") {
-                continue;
-            }
-
-            if line.starts_with('[') && line.ends_with(']') {
-                let section = &line[1..line.len() - 1];
-                in_difficulty_section = section == "Difficulty";
-                in_hit_objects_section = section == "HitObjects";
-                continue;
-            }
-
-            if in_difficulty_section {
-                if let Some((key, value)) = parse_key_value(line) {
-                    match key.as_str() {
-                        "OverallDifficulty" => {
-                            overall_difficulty =
-                                value.parse().map_err(|_| "Invalid OverallDifficulty")?;
-                        }
-                        "CircleSize" => {
-                            circle_size = value.parse().map_err(|_| "Invalid CircleSize")?;
-                        }
-                        _ => {}
-                    }
-                }
-            } else if in_hit_objects_section {
-                if let Some(obj) = parse_hit_object(line, circle_size) {
-                    hit_objects.push(obj);
+    pub fn get_key_usage(k: i32, t: i32, note_seq: &[Note], base_corners: &[f64]) -> Vec<Vec<bool>> {
+        let mut key_usage = vec![vec![false; base_corners.len()]; k as usize];
+        for note in note_seq {
+            let start_time = (note.h as f64 - 150.0).max(0.0);
+            let end_time = if note.t < 0 {
+                note.h as f64 + 150.0
+            } else {
+                (note.t as f64 + 150.0).min(t as f64 - 1.0)
+            };
+            let left_idx = base_corners.partition_point(|&x| x < start_time);
+            let right_idx = base_corners.partition_point(|&x| x < end_time);
+            for idx in left_idx..right_idx {
+                if idx < key_usage[note.k as usize].len() {
+                    key_usage[note.k as usize][idx] = true;
                 }
             }
         }
-
-        Ok(SRData {
-            overall_difficulty,
-            circle_size,
-            hit_objects,
-        })
+        key_usage
     }
 
-    pub fn from_osu_file<P: AsRef<Path>>(path: P) -> Result<Self, String> {
-        let content =
-            fs::read_to_string(path).map_err(|e| format!("Failed to read file: {}", e))?;
-        Self::from_osu_content(&content)
-    }
-}
-
-fn parse_key_value(line: &str) -> Option<(String, String)> {
-    let colon_pos = line.find(':')?;
-    let key = line[..colon_pos].trim().to_string();
-    let value = line[colon_pos + 1..].trim().to_string();
-    Some((key, value))
-}
-
-fn parse_hit_object(line: &str, circle_size: f64) -> Option<HitObject> {
-    let parts: Vec<&str> = line.split(',').collect();
-    if parts.len() < 4 {
-        return None;
-    }
-
-    let x: f64 = parts[0].parse().ok()?;
-    let start_time: i32 = parts[2].parse().ok()?;
-    let obj_type: i32 = parts[3].parse().ok()?;
-
-    // For mania, calculate column from x using the same formula as C#
-    let total_column = circle_size as i32;
-    let offset = 256.0 / total_column as f64;
-    let ratio = 512.0 / total_column as f64;
-    let col = ((x - offset) / ratio).round() as i32;
-
-    // Check if it's a long note (bit 7 set in type)
-    let is_long_note = (obj_type & 128) != 0;
-    let mut end_time = if is_long_note && parts.len() >= 6 {
-        parts[5].split(':').next().unwrap_or("").parse().unwrap_or(-1)
-    } else {
-        -1
-    };
-
-    // For notes (not long notes), set end_time to start_time
-    if end_time == -1 {
-        end_time = start_time;
-    }
-
-    Some(HitObject {
-        position: Position { x: col as f64 },
-        start_time,
-        end_time,
-    })
-}
-
-#[no_mangle]
-pub extern "C" fn calculate_sr_from_osu_content(content_ptr: *const u8, len: usize) -> *mut u8 {
-    let content_bytes = unsafe { std::slice::from_raw_parts(content_ptr, len) };
-
-    let content = match std::str::from_utf8(content_bytes) {
-        Ok(s) => s,
-        Err(_) => return std::ptr::null_mut(),
-    };
-
-    let sr_data = match SRData::from_osu_content(content) {
-        Ok(data) => {
-            eprintln!("Rust parsed {} hit objects", data.hit_objects.len());
-            data
-        },
-        Err(e) => {
-            eprintln!("Rust parse error: {}", e);
-            return std::ptr::null_mut();
-        }
-    };
-
-    let beatmap = Beatmap {
-        difficulty_section: DifficultySection {
-            overall_difficulty: sr_data.overall_difficulty,
-            circle_size: sr_data.circle_size,
-        },
-        hit_objects: sr_data.hit_objects,
-    };
-
-    let sr = match SRCalculator::calculate_sr(&beatmap) {
-        Ok(s) => s,
-        Err(_) => return std::ptr::null_mut(),
-    };
-
-    let result = json!({ "sr": sr });
-    let result_str = result.to_string();
-    let c_str = std::ffi::CString::new(result_str).unwrap();
-    c_str.into_raw() as *mut u8
-}
-
-#[no_mangle]
-pub extern "C" fn calculate_sr_from_osu_file(path_ptr: *const u8, len: usize) -> *mut u8 {
-    let path_bytes = unsafe { std::slice::from_raw_parts(path_ptr, len) };
-
-    let path = match std::str::from_utf8(path_bytes) {
-        Ok(s) => s,
-        Err(_) => return std::ptr::null_mut(),
-    };
-
-    let sr_data = match SRData::from_osu_file(path) {
-        Ok(data) => {
-            eprintln!("Rust parsed {} hit objects", data.hit_objects.len());
-            // Debug: print first few hit objects
-            for (i, ho) in data.hit_objects.iter().take(5).enumerate() {
-                eprintln!("Rust Note {}: col={}, start={}, end={}", i, ho.position.x as i32, ho.start_time, ho.end_time);
+    pub fn get_key_usage_400(k: i32, _t: i32, note_seq: &[Note], base_corners: &[f64]) -> Vec<Vec<f64>> {
+        let mut key_usage_400 = vec![vec![0.0; base_corners.len()]; k as usize];
+        for note in note_seq {
+            let start_time = note.h as f64;
+            let end_time = if note.t < 0 {
+                note.h as f64
+            } else {
+                note.t as f64
+            };
+            let left400_idx = base_corners.partition_point(|&x| x < start_time - 400.0);
+            let left_idx = base_corners.partition_point(|&x| x < start_time);
+            let right_idx = base_corners.partition_point(|&x| x < end_time);
+            let right400_idx = base_corners.partition_point(|&x| x < end_time + 400.0);
+            for idx in left_idx..right_idx {
+                if idx < key_usage_400[note.k as usize].len() {
+                    key_usage_400[note.k as usize][idx] += 3.75 + ((end_time - start_time).min(1500.0) / 150.0);
+                }
             }
-            data
-        },
-        Err(e) => {
-            eprintln!("Rust parse error: {}", e);
-            return std::ptr::null_mut();
+            for idx in left400_idx..left_idx {
+                if idx < key_usage_400[note.k as usize].len() {
+                    let delta = start_time - base_corners[idx];
+                    key_usage_400[note.k as usize][idx] += 3.75 - 3.75 / 400.0_f64.powi(2) * delta.powi(2);
+                }
+            }
+            for idx in right_idx..right400_idx {
+                if idx < key_usage_400[note.k as usize].len() {
+                    let delta = base_corners[idx] - end_time;
+                    key_usage_400[note.k as usize][idx] += 3.75 - 3.75 / 400.0_f64.powi(2) * delta.powi(2);
+                }
+            }
         }
-    };
+        key_usage_400
+    }
 
-    let beatmap = Beatmap {
-        difficulty_section: DifficultySection {
-            overall_difficulty: sr_data.overall_difficulty,
-            circle_size: sr_data.circle_size,
-        },
-        hit_objects: sr_data.hit_objects,
-    };
+    pub fn compute_anchor(k: i32, key_usage_400: &[Vec<f64>], _base_corners: &[f64]) -> Vec<f64> {
+        let mut anchor = vec![0.0; key_usage_400[0].len()];
+        for idx in 0..anchor.len() {
+            let mut counts: Vec<f64> = (0..k as usize).map(|ki| key_usage_400[ki][idx]).collect();
+            counts.sort_by(|a, b| b.partial_cmp(a).unwrap()); // descending
+            let nonzero_counts: Vec<f64> = counts.into_iter().filter(|&x| x != 0.0).collect();
+            if nonzero_counts.len() > 1 {
+                let walk: f64 = nonzero_counts.iter().enumerate().skip(1).map(|(i, &c)| (nonzero_counts[i-1] - c) * (1.0 - 4.0 * (0.5 - c / nonzero_counts[i-1]).powi(2))).sum();
+                let max_walk: f64 = nonzero_counts.iter().sum();
+                anchor[idx] = walk / max_walk;
+            } else {
+                anchor[idx] = 0.0;
+            }
+        }
+        anchor = anchor.iter().map(|&a| 1.0 + (a - 0.18).min(5.0 * (a - 0.22).powi(3))).collect();
+        anchor
+    }
 
-    let sr = match SRCalculator::calculate_sr(&beatmap) {
-        Ok(s) => s,
-        Err(_) => return std::ptr::null_mut(),
-    };
+    pub fn ln_bodies_count_sparse_representation(ln_seq: &[Note], t: i32) -> (Vec<f64>, Vec<f64>, Vec<f64>) {
+        let mut diff: std::collections::HashMap<i32, f64> = std::collections::HashMap::new();
+        for note in ln_seq {
+            let t0 = (note.h as f64 + 60.0).min(note.t as f64) as i32;
+            let t1 = (note.h as f64 + 120.0).min(note.t as f64) as i32;
+            *diff.entry(t0).or_insert(0.0) += 1.3;
+            *diff.entry(t1).or_insert(0.0) += -1.3 + 1.0; // net change at t1: -1.3 from first part, then +1
+            *diff.entry(note.t).or_insert(0.0) -= 1.0;
+        }
 
-    let notes: Vec<_> = beatmap.hit_objects.iter().take(20).map(|ho| json!({
-        "col": ho.position.x as i32,
-        "start": ho.start_time,
-        "end": ho.end_time
-    })).collect();
+        let mut points: Vec<i32> = vec![0, t];
+        points.extend(diff.keys().cloned());
+        points.sort();
+        points.dedup();
 
-    let result_str = json!({
-        "sr": sr,
-        "notes": notes
-    }).to_string();
-    let c_str = std::ffi::CString::new(result_str).unwrap();
-    c_str.into_raw() as *mut u8
+        let mut values = Vec::new();
+        let mut cumsum = vec![0.0];
+        let mut curr = 0.0;
+
+        for i in 0..points.len() - 1 {
+            let t_point = points[i];
+            if let Some(&change) = diff.get(&t_point) {
+                curr += change;
+            }
+            let v = curr.min(2.5 + 0.5 * curr);
+            values.push(v);
+            let seg_length = (points[i + 1] - points[i]) as f64;
+            cumsum.push(cumsum.last().unwrap() + seg_length * v);
+        }
+        (points.into_iter().map(|x| x as f64).collect(), cumsum, values)
+    }
+
+    pub fn interp_values(new_x: &[f64], old_x: &[f64], old_vals: &[f64]) -> Vec<f64> {
+        new_x.iter().map(|&x| {
+            if x <= old_x[0] {
+                old_vals[0]
+            } else if x >= old_x[old_x.len() - 1] {
+                old_vals[old_vals.len() - 1]
+            } else {
+                let idx = old_x.partition_point(|&val| val < x) - 1;
+                if idx >= old_x.len() - 1 {
+                    old_vals[old_vals.len() - 1]
+                } else {
+                    let x1 = old_x[idx];
+                    let x2 = old_x[idx + 1];
+                    let y1 = old_vals[idx];
+                    let y2 = old_vals[idx + 1];
+                    y1 + (y2 - y1) * (x - x1) / (x2 - x1)
+                }
+            }
+        }).collect()
+    }
+
+    pub fn step_interp(new_x: &[f64], old_x: &[f64], old_vals: &[f64]) -> Vec<f64> {
+        new_x.iter().map(|&x| {
+            let idx = old_x.partition_point(|&val| val <= x).saturating_sub(1);
+            old_vals[idx.min(old_vals.len() - 1)]
+        }).collect()
+    }
+
+    pub fn compute_c_and_ks(k: i32, _t: i32, note_seq: &[Note], key_usage: &[Vec<bool>], base_corners: &[f64]) -> (Vec<f64>, Vec<i32>) {
+        let mut note_hit_times: Vec<i32> = note_seq.iter().map(|n| n.h).collect();
+        note_hit_times.sort();
+
+        let c_step: Vec<f64> = base_corners.iter().map(|&s| {
+            let low = s - 500.0;
+            let high = s + 500.0;
+            let left = note_hit_times.partition_point(|&time| (time as f64) < low);
+            let right = note_hit_times.partition_point(|&time| (time as f64) < high);
+            (right - left) as f64
+        }).collect();
+
+        let ks_step: Vec<i32> = (0..base_corners.len()).map(|i| {
+            let count: i32 = (0..k as usize).map(|col| key_usage[col][i] as i32).sum();
+            count.max(1)
+        }).collect();
+
+        (c_step, ks_step)
+    }
+
+    pub fn calculate_final_sr(
+        j_bar: &[f64],
+        x_bar: &[f64],
+        p_bar: &[f64],
+        a_bar: &[f64],
+        r_bar: &[f64],
+        ks: &[f64],
+        c: &mut [f64],
+        all_corners: &[f64],
+        note_seq: &[Note],
+        ln_seq: &[Note],
+    ) -> f64 {
+        let mut s = vec![0.0; all_corners.len()];
+        let mut d = vec![0.0; all_corners.len()];
+
+        for i in 0..all_corners.len() {
+            let j_bar_val = j_bar[i].max(0.0);
+            let x_bar_val = x_bar[i].max(0.0);
+            let p_bar_val = p_bar[i].max(0.0);
+            let a_bar_val = a_bar[i].max(0.0);
+            let r_bar_val = r_bar[i].max(0.0);
+            let ks_val = ks[i];
+            let c_val = c[i];
+
+            let term1 = Self::W_0 * (a_bar_val.powf(3.0 / ks_val) * j_bar_val.min(8.0 + 0.85 * j_bar_val)).powf(1.5);
+            let term2 = (1.0 - Self::W_0) * (a_bar_val.powf(2.0 / 3.0) * (0.8 * p_bar_val + r_bar_val * 35.0 / (c_val + 8.0))).powf(1.5);
+            s[i] = (term1 + term2).powf(2.0 / 3.0);
+
+            let t_t = a_bar_val.powf(3.0 / ks_val) * x_bar_val / (x_bar_val + s[i] + 1.0);
+            d[i] = Self::W_1 * s[i].powf(0.5) * t_t.powf(Self::P_1) + s[i] * Self::W_2;
+        }
+
+        Self::forward_fill(&mut d);
+        Self::forward_fill(c);
+
+        // Use C values directly as weights (matching C# implementation)
+        let effective_weights: Vec<f64> = c.iter().map(|&c_val| c_val).collect();
+
+        // Percentile calculation
+        let mut d_with_weights: Vec<(f64, f64)> = d.iter().zip(effective_weights.iter()).map(|(&d_val, &w)| (d_val, w)).collect();
+        d_with_weights.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+
+        let sorted_d: Vec<f64> = d_with_weights.iter().map(|(d, _)| *d).collect();
+        let sorted_weights: Vec<f64> = d_with_weights.iter().map(|(_, w)| *w).collect();
+
+        let total_weight: f64 = sorted_weights.iter().sum();
+        let mut cum_weights = vec![0.0; sorted_weights.len()];
+        for i in 0..sorted_weights.len() {
+            cum_weights[i] = if i == 0 { sorted_weights[i] } else { cum_weights[i-1] + sorted_weights[i] };
+        }
+        let norm_cum_weights: Vec<f64> = cum_weights.iter().map(|&cw| cw / total_weight).collect();
+
+        let target_percentiles = [0.945, 0.935, 0.925, 0.915, 0.845, 0.835, 0.825, 0.815];
+
+        let mut percentile_93 = 0.0;
+        for &p in &target_percentiles[..4] {
+            let idx = norm_cum_weights.partition_point(|&x| x < p).min(sorted_d.len() - 1);
+            percentile_93 += sorted_d[idx];
+        }
+        percentile_93 /= 4.0;
+
+        let mut percentile_83 = 0.0;
+        for &p in &target_percentiles[4..] {
+            let idx = norm_cum_weights.partition_point(|&x| x < p).min(sorted_d.len() - 1);
+            percentile_83 += sorted_d[idx];
+        }
+        percentile_83 /= 4.0;
+
+        let weighted_mean = (sorted_d.iter().zip(sorted_weights.iter())
+            .map(|(d, w)| d.powf(5.0) * w).sum::<f64>() / sorted_weights.iter().sum::<f64>())
+            .powf(1.0 / 5.0);
+
+        let mut sr = 0.88 * percentile_93 * 0.25 + 0.94 * percentile_83 * 0.2 + weighted_mean * 0.55;
+        println!("Before scaling: percentile_93={}, percentile_83={}, weighted_mean={}, sr={}", percentile_93, percentile_83, weighted_mean, sr);
+        sr = sr.powf(Self::P_0) / 8.0f64.powf(Self::P_0) * 8.0;
+        println!("After power scaling: sr={}", sr);
+
+        let total_notes = note_seq.len() as f64 + 0.5 * ln_seq.len() as f64;
+        sr *= total_notes / (total_notes + 60.0);
+
+        sr = Self::rescale_high(sr);
+        sr *= 0.975;
+        sr
+    }
 }

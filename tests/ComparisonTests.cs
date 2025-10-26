@@ -56,6 +56,15 @@ namespace LAsOsuBeatmapParser.Tests
             _output.WriteLine($"谱面信息: {beatmap.BeatmapInfo.Metadata.Artist} - {beatmap.BeatmapInfo.Metadata.Title} [{beatmap.BeatmapInfo.Metadata.Version}]");
             _output.WriteLine($"键数: {(int)beatmap.BeatmapInfo.Difficulty.CircleSize}k");
             _output.WriteLine($"C# parsed hit objects: {beatmap.HitObjects.Count}");
+
+            // Debug: print first few hit objects
+            for (int i = 0; i < Math.Min(5, beatmap.HitObjects.Count); i++)
+            {
+                var ho = beatmap.HitObjects[i];
+                int col = ho is ManiaHitObject maniaHit ? maniaHit.Column : ManiaExtensions.GetColumnFromX((int)beatmap.BeatmapInfo.Difficulty.CircleSize, ho.Position.X);
+                _output.WriteLine($"C# Note {i}: col={col}, start={ho.StartTime}, end={ho.EndTime}");
+            }
+
             _output.WriteLine("");
 
             // 预热JIT
