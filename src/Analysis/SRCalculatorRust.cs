@@ -15,7 +15,7 @@ namespace LAsOsuBeatmapParser.Analysis
         private const string DllName = "rust_sr_calculator.dll";
 
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true, CharSet = CharSet.Ansi)]
-        private static extern IntPtr calculate_sr_from_osu_file(IntPtr pathPtr, UIntPtr len);
+        private static extern double calculate_sr_from_osu_file(IntPtr pathPtr, UIntPtr len);
 
         public static double? CalculateSR_FromFile(string filePath)
         {
@@ -28,28 +28,21 @@ namespace LAsOsuBeatmapParser.Analysis
                 IntPtr pathPtr   = Marshal.AllocHGlobal(pathBytes.Length);
                 Marshal.Copy(pathBytes, 0, pathPtr, pathBytes.Length);
 
-                IntPtr resultPtr = calculate_sr_from_osu_file(pathPtr, (UIntPtr)pathBytes.Length);
+                double result = calculate_sr_from_osu_file(pathPtr, (UIntPtr)pathBytes.Length);
 
                 Marshal.FreeHGlobal(pathPtr);
 
-                if (resultPtr == IntPtr.Zero)
+                // Check for error (negative values indicate errors)
+                if (result < 0.0)
                     return null;
 
-                string resultJson = Marshal.PtrToStringUTF8(resultPtr)!;
-                Marshal.FreeHGlobal(resultPtr);
-
-                using JsonDocument doc  = JsonDocument.Parse(resultJson);
-                JsonElement        root = doc.RootElement;
-                if (root.TryGetProperty("sr", out JsonElement srElement) && srElement.ValueKind == JsonValueKind.Number)
-                    return srElement.GetDouble();
+                return result;
             }
             catch (Exception)
             {
                 // Return null on any error (including Rust panics)
                 return null;
             }
-
-            return null;
         }
     }
 }

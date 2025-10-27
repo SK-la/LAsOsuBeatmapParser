@@ -6,6 +6,7 @@ pub mod math;
 
 use crate::parser::OsuParser;
 use crate::sr::SRCalculator;
+use std::os::raw::c_char;
 
 pub struct SRAPI;
 
@@ -15,6 +16,22 @@ impl SRAPI {
         parser.process().map_err(|e| e.to_string())?;
         let data = parser.get_parsed_data();
         SRCalculator::calculate_sr_from_parsed_data(&data)
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn calculate_sr_from_osu_file(path_ptr: *const c_char, len: usize) -> f64 {
+    // Convert the C string to Rust string
+    let path_bytes = unsafe { std::slice::from_raw_parts(path_ptr as *const u8, len) };
+    let path_str = match std::str::from_utf8(path_bytes) {
+        Ok(s) => s,
+        Err(_) => return -1.0, // Error indicator
+    };
+
+    // Calculate SR
+    match SRAPI::calculate_sr(path_str) {
+        Ok(sr) => sr,
+        Err(_) => -1.0, // Error indicator
     }
 }
 
