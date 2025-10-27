@@ -131,6 +131,16 @@ namespace LAsOsuBeatmapParser.Analysis
                 // Calculate T
                 int totalTime = Math.Max(noteSeq.Max(n => n.StartTime), noteSeq.Max(n => n.EndTime)) + 1;
 
+                var (allCorners, baseCorners, _) = GetCorners(totalTime, noteSeq);
+                var keyUsage400 = GetKeyUsage400(keyCount, totalTime, noteSeq, baseCorners);
+                var anchorBase = ComputeAnchor(keyCount, keyUsage400, baseCorners);
+                double[] anchor = new double[totalTime];
+
+                for (int t = 0; t < totalTime; t++)
+                {
+                    anchor[t] = InterpValues(new double[] { t }, baseCorners, anchorBase)[0];
+                }
+
                 var stopwatch = new Stopwatch();
 
                 // Start all sections in parallel
@@ -149,7 +159,7 @@ namespace LAsOsuBeatmapParser.Analysis
                 Task<double[]> task24 = Task.Run(() =>
                 {
                     var      sectionStopwatch = Stopwatch.StartNew();
-                    double[] XBar             = CalculateSection24(keyCount, totalTime, noteSeqByColumn, x);
+                    double[] XBar             = CalculateSection24(keyCount, totalTime, noteSeqByColumn, x, noteSeq);
                     sectionStopwatch.Stop();
                     return XBar;
                 });
@@ -157,7 +167,7 @@ namespace LAsOsuBeatmapParser.Analysis
                 Task<double[]> task25 = Task.Run(() =>
                 {
                     var      sectionStopwatch = Stopwatch.StartNew();
-                    double[] PBar             = CalculateSection25(totalTime, LNSeq, noteSeq, x);
+                    double[] PBar             = CalculateSection25(totalTime, LNSeq, noteSeq, x, anchor);
                     sectionStopwatch.Stop();
                     return PBar;
                 });
@@ -189,9 +199,73 @@ namespace LAsOsuBeatmapParser.Analysis
                 // Logger.WriteLine(LogLevel.Debug, $"[SRCalculator]Section 26/27 Time: {stopwatch.ElapsedMilliseconds}ms");
                 times["Section2627"] = stopwatch.ElapsedMilliseconds;
 
+                double[] C_step = new double[baseCorners.Length];
+                for (int i = 0; i < baseCorners.Length; i++)
+                {
+                    double s = baseCorners[i];
+                    int low = (int)Math.Max(0, s - 500);
+                    int high = (int)Math.Min(totalTime, s + 500);
+                    int cnt = 0;
+                    for (int j = 0; j < noteSeq.Length; j++)
+                    {
+                        if (noteSeq[j].StartTime >= low && noteSeq[j].StartTime < high) cnt++;
+                    }
+                    C_step[i] = cnt;
+                }
+                double[] C_arr = new double[allCorners.Length];
+                for (int i = 0; i < allCorners.Length; i++)
+                {
+                    double q = allCorners[i];
+                    int idx = Array.BinarySearch(baseCorners, q);
+                    if (idx >= 0) C_arr[i] = C_step[idx];
+                    else
+                    {
+                        idx = ~idx - 1;
+                        if (idx < 0) C_arr[i] = 0;
+                        else C_arr[i] = C_step[idx];
+                    }
+                }
+                double[] gaps = new double[allCorners.Length];
+                if (allCorners.Length > 0)
+                {
+                    gaps[0] = allCorners.Length > 1 ? (allCorners[1] - allCorners[0]) / 2.0 : allCorners[0] / 2.0;
+                    if (allCorners.Length > 1)
+                        gaps[allCorners.Length - 1] = (allCorners[allCorners.Length - 1] - allCorners[allCorners.Length - 2]) / 2.0;
+                    for (int i = 1; i < allCorners.Length - 1; i++)
+                    {
+                        gaps[i] = (allCorners[i + 1] - allCorners[i - 1]) / 2.0;
+                    }
+                }
+                double[] effective_weights = new double[allCorners.Length];
+                for (int i = 0; i < allCorners.Length; i++)
+                {
+                    effective_weights[i] = C_arr[i] * gaps[i];
+                }
+                double[] T_array = new double[totalTime];
+                for (int i = 0; i < totalTime; i++) T_array[i] = i;
+                double[] JBar_all = InterpValues(allCorners, T_array, JBar);
+                double[] XBar_all = InterpValues(allCorners, T_array, XBar);
+                double[] PBar_all = InterpValues(allCorners, T_array, PBar);
+                double[] ABar_all = InterpValues(allCorners, T_array, ABar);
+                double[] RBar_all = InterpValues(allCorners, T_array, RBar);
+                int[] KS_all = new int[allCorners.Length];
+                for (int i = 0; i < allCorners.Length; i++)
+                {
+                    double q = allCorners[i];
+                    int idx = Array.BinarySearch(T_array, q);
+                    if (idx >= 0) KS_all[i] = KS[idx];
+                    else
+                    {
+                        idx = ~idx - 1;
+                        if (idx < 0) KS_all[i] = 1;
+                        else KS_all[i] = KS[idx];
+                    }
+                }
+                double[] D_all = new double[allCorners.Length];
+
                 // Final calculation
                 stopwatch.Restart();
-                double result = CalculateSection3(JBar, XBar, PBar, ABar, RBar, KS, totalTime, noteSeq, LNSeq, keyCount);
+                double result = CalculateSection3(JBar_all, XBar_all, PBar_all, ABar_all, RBar_all, KS_all, allCorners.Length, noteSeq, LNSeq, keyCount, C_arr, effective_weights, D_all);
                 stopwatch.Stop();
                 // Logger.WriteLine(LogLevel.Debug, $"[SRCalculator]Section 3 Time: {stopwatch.ElapsedMilliseconds}ms");
                 times["Section3"] = stopwatch.ElapsedMilliseconds;
@@ -355,13 +429,31 @@ namespace LAsOsuBeatmapParser.Analysis
             return (JBar, deltaKs);
         }
 
-        private double[] CalculateSection24(int K, int T, SRsNote[][] noteSeqByColumn, double x)
+        private double[] CalculateSection24(int K, int T, SRsNote[][] noteSeqByColumn, double x, SRsNote[] noteSeq)
         {
+            bool[][] activeColumnsT = new bool[T][];
+            for (int t = 0; t < T; t++) activeColumnsT[t] = new bool[K];
+            Parallel.ForEach(noteSeq, note =>
+            {
+                int startTime = Math.Max(0, note.StartTime - 150);
+                int endTime = note.EndTime < 0 ? Math.Min(note.StartTime + 150, T - 1) : Math.Min(note.EndTime + 150, T - 1);
+                for (int s = startTime; s <= endTime; s++) activeColumnsT[s][note.Index] = true;
+            });
+            List<int>[] activeListT = new List<int>[T];
+            for (int t = 0; t < T; t++)
+            {
+                activeListT[t] = new List<int>();
+                for (int kk = 0; kk < K; kk++) if (activeColumnsT[t][kk]) activeListT[t].Add(kk);
+            }
+            double[] cross_coeff = CrossMatrixProvider.GetMatrix(K);
+
             double[][] XKs = new double[K + 1][];
+            double[][] fastCross = new double[K + 1][];
 
             Parallel.For(0, K + 1, k =>
             {
                 XKs[k] = new double[T];
+                fastCross[k] = new double[T];
                 SRsNote[] notesInPair;
 
                 if (k == 0)
@@ -378,6 +470,7 @@ namespace LAsOsuBeatmapParser.Analysis
                 }
 
                 Span<double> XKsSpan = XKs[k];
+                Span<double> fastCrossSpan = fastCross[k];
 
                 for (int i = 1; i < notesInPair.Length; i++)
                 {
@@ -388,7 +481,14 @@ namespace LAsOsuBeatmapParser.Analysis
                     int start  = notesInPair[i - 1].StartTime;
                     int end    = notesInPair[i].StartTime;
                     int length = end - start;
+                    if ((!activeListT[start].Contains(k - 1) && !activeListT[end].Contains(k - 1)) || (!activeListT[start].Contains(k) && !activeListT[end].Contains(k)))
+                    {
+                        val *= (1 - cross_coeff[k]);
+                    }
                     XKsSpan.Slice(start, length).Fill(val);
+
+                    double fastVal = Math.Max(0, 0.4 * Math.Pow((Math.Max(delta, Math.Max(0.06, 0.75 * x))), -2) - 80);
+                    fastCrossSpan.Slice(start, length).Fill(fastVal);
                 }
             });
 
@@ -399,12 +499,19 @@ namespace LAsOsuBeatmapParser.Analysis
                 X[s] = 0;
                 double[] matrix                   = CrossMatrixProvider.GetMatrix(K);
                 for (int k = 0; k <= K; k++) X[s] += XKs[k][s] * matrix[k];
+
+                // Add fast cross terms
+                for (int k = 0; k < K; k++)
+                {
+                    double sqrtTerm = Math.Sqrt(fastCross[k][s] * matrix[k] * fastCross[k + 1][s] * matrix[k + 1]);
+                    X[s] += sqrtTerm;
+                }
             }
 
             return Smooth(X, T);
         }
 
-        private double[] CalculateSection25(int T, SRsNote[] LNSeq, SRsNote[] noteSeq, double x)
+        private double[] CalculateSection25(int T, SRsNote[] LNSeq, SRsNote[] noteSeq, double x, double[] anchor)
         {
             double[] P        = new double[T];
             double[] LNBodies = new double[T];
@@ -437,53 +544,55 @@ namespace LAsOsuBeatmapParser.Analysis
             for (int t = 1; t <= T; t++)
                 prefixSumLNBodies[t] = prefixSumLNBodies[t - 1] + LNBodies[t - 1];
 
-            double B(double delta)
-            {
-                double val = 7.5 / delta;
-
-                if (val is > 160 and < 360)
-                {
-                    double diff  = val - 160;
-                    double diff2 = val - 360;
-                    return 1 + (1.4e-7 * diff * (diff2 * diff2));
-                }
-
-                return 1;
-            }
-
-            // 预计算常量，减少重复计算
-            const double lambda2Scaled = lambda_2 * 0.001;
-
+            // 计算P
             for (int i = 0; i < noteSeq.Length - 1; i++)
             {
-                double delta = 0.001 * (noteSeq[i + 1].StartTime - noteSeq[i].StartTime);
+                int    h_l       = noteSeq[i].StartTime;
+                int    h_r       = noteSeq[i + 1].StartTime;
+                double deltaTime = h_r - h_l;
 
-                if (delta < 1e-9)
-                    P[noteSeq[i].StartTime] += 1000 * Math.Sqrt(Math.Sqrt(0.02 * ((4 / x) - lambda_3)));
+                if (deltaTime < 1e-9)
+                {
+                    // Dirac delta case
+                    double spike = 1000 * Math.Pow(0.02 * ((4 / x) - 24), 1.0 / 4);
+                    int    spikeStart = Math.Max(0, h_l);
+                    int    spikeEnd   = Math.Min(T, h_l + 1);
+                    for (int t = spikeStart; t < spikeEnd; t++)
+                        P[t] += spike;
+                    continue;
+                }
+
+                int pStart = Math.Max(0, h_l);
+                int pEnd   = Math.Min(T, h_r);
+
+                double delta = 0.001 * deltaTime;
+
+                // LN_sum approximation
+                double lnSum = prefixSumLNBodies[Math.Min(T, h_r)] - prefixSumLNBodies[Math.Max(0, h_l)];
+                double v     = 1 + (6 * 0.001 * lnSum);
+
+                double b_val = 1;
+                if (160 < 7.5 / delta && 7.5 / delta < 360)
+                {
+                    double temp = 7.5 / delta;
+                    b_val = 1 + 1.7e-7 * (temp - 160) * Math.Pow((temp - 360), 2);
+                }
+
+                double inc;
+                if (delta < 2 * x / 3)
+                {
+                    double temp = (1 - (24 * ((delta - x / 2) * (delta - x / 2)) / x));
+                    inc = 1 / delta * Math.Pow(0.08 / x * temp, 1.0 / 4) * Math.Max(b_val, v);
+                }
                 else
                 {
-                    int    h_l = noteSeq[i].StartTime;
-                    int    h_r = noteSeq[i + 1].StartTime;
-                    double v   = 1 + (prefixSumLNBodies[h_r] - prefixSumLNBodies[h_l]) * lambda2Scaled;
+                    double temp = (1 - (24 * ((x / 6) * (x / 6)) / x));
+                    inc = 1 / delta * Math.Pow(0.08 / x * temp, 1.0 / 4) * Math.Max(b_val, v);
+                }
 
-                    if (delta < 2 * x / 3)
-                    {
-                        double baseVal = Math.Sqrt(Math.Sqrt(0.08 / x *
-                                                             (1 - (lambda_3 / x * (delta - (x / 2)) * (delta - (x / 2)))))) *
-                                         B(delta) * v / delta;
-
-                        for (int s = h_l; s < h_r; s++)
-                            P[s] += baseVal;
-                    }
-                    else
-                    {
-                        double baseVal = Math.Sqrt(Math.Sqrt(0.08 / x *
-                                                             (1 - (lambda_3 / x * (x / 6) * (x / 6))))) *
-                                         B(delta) * v / delta;
-
-                        for (int s = h_l; s < h_r; s++)
-                            P[s] += baseVal;
-                    }
+                for (int t = pStart; t < pEnd; t++)
+                {
+                    P[t] += Math.Min(inc * anchor[t], Math.Max(inc, (inc * 2 - 10)));
                 }
             }
 
@@ -532,7 +641,7 @@ namespace LAsOsuBeatmapParser.Analysis
                     int col2 = cols[i + 1];
 
                     dks[col1][s] = Math.Abs(deltaKs[col1][s] - deltaKs[col2][s]) +
-                                   Math.Max(0, Math.Max(deltaKs[col1][s], deltaKs[col2][s]) - 0.3);
+                                   (0.4 * Math.Max(0, Math.Max(deltaKs[col1][s], deltaKs[col2][s]) - 0.11));
 
                     double maxDelta = Math.Max(deltaKs[col1][s], deltaKs[col2][s]);
                     if (dks[col1][s] < 0.02)
@@ -599,6 +708,20 @@ namespace LAsOsuBeatmapParser.Analysis
             return 9 + ((sr - 9) * (1 / 1.2));
         }
 
+        private static int BisectLeft(double[] array, double value)
+        {
+            int low = 0, high = array.Length;
+            while (low < high)
+            {
+                int mid = (low + high) / 2;
+                if (array[mid] < value)
+                    low = mid + 1;
+                else
+                    high = mid;
+            }
+            return low;
+        }
+
         private void ForwardFill(double[] array)
         {
             double lastValidValue = 0; // Use initialValue for leading NaNs and 0s
@@ -618,60 +741,28 @@ namespace LAsOsuBeatmapParser.Analysis
                                          double[]  ABar,
                                          double[]  RBar,
                                          int[]     KS,
-                                         int       T,
+                                         int       len,
                                          SRsNote[] noteSeq,
                                          SRsNote[] LNSeq,
-                                         int       K)
+                                         int       K,
+                                         double[]  C_arr,
+                                         double[]  effectiveWeights,
+                                         double[]  D_all)
         {
-            double[] C     = new double[T];
-            int      start = 0, end = 0;
-
-            for (int t = 0; t < T; t++)
+            for (int i = 0; i < len; i++)
             {
-                while (start < noteSeq.Length && noteSeq[start].StartTime < t - 500)
-                    start++;
-                while (end < noteSeq.Length && noteSeq[end].StartTime < t + 500)
-                    end++;
-                C[t] = end - start;
+                double term1 = 0.4 * Math.Pow(Math.Pow(ABar[i], 3.0 / KS[i]) * Math.Min(JBar[i], 8 + (0.85 * JBar[i])), 1.5);
+                double term2 = (1 - 0.4) * Math.Pow(Math.Pow(ABar[i], 2.0 / 3) * ((0.8 * PBar[i]) + (RBar[i] * 35 / (C_arr[i] + 8))), 1.5);
+                double S = Math.Pow(term1 + term2, 2.0 / 3);
+                double T_t = Math.Pow(ABar[i], 3.0 / KS[i]) * XBar[i] / (XBar[i] + S + 1);
+                D_all[i] = (2.7 * Math.Pow(S, 0.5) * Math.Pow(T_t, 1.5)) + (S * 0.27);
             }
 
-            double[] S = new double[T];
-            double[] D = new double[T];
-
-            // 并行化计算S和D
-            Parallel.For(0, T, t =>
-            {
-                // Ensure all values are non-negative
-                JBar[t] = Math.Max(0, JBar[t]);
-                XBar[t] = Math.Max(0, XBar[t]);
-                PBar[t] = Math.Max(0, PBar[t]);
-                ABar[t] = Math.Max(0, ABar[t]);
-                RBar[t] = Math.Max(0, RBar[t]);
-
-                double term1 = Math.Pow(0.4 * Math.Pow(Math.Pow(ABar[t], 3.0 / KS[t]) * Math.Min(JBar[t], 8 + (0.85 * JBar[t])), 1.5), 1);
-                double term2 = Math.Pow((1 - 0.4) * Math.Pow(Math.Pow(ABar[t], 2.0 / 3) *
-                                                             ((0.8 * PBar[t]) + (RBar[t] * 35 / (C[t] + 8))), 1.5), 1);
-                S[t] = Math.Pow(term1 + term2, 2.0 / 3);
-
-                double T_t = Math.Pow(ABar[t], 3.0 / KS[t]) * XBar[t] / (XBar[t] + S[t] + 1);
-                D[t] = (2.7 * Math.Pow(S[t], 0.5) * Math.Pow(T_t, 1.5)) + (S[t] * 0.27);
-            });
-
-            ForwardFill(D);
-            ForwardFill(C);
-
-            // New percentile-based calculation
-            var dList   = new List<double>();
-            var weights = new List<double>();
-
-            for (int t = 0; t < T; t++)
-            {
-                dList.Add(D[t]);
-                weights.Add(C[t]);
-            }
+            List<double> dList = D_all.ToList();
+            List<double> wList = effectiveWeights.ToList();
 
             // Sort D by value, keep weights
-            List<(double d, double w)> sortedPairs   = dList.Zip(weights, (d, w) => (d, w)).OrderBy(p => p.d).ToList();
+            List<(double d, double w)> sortedPairs   = dList.Zip(wList, (d, w) => (d, w)).OrderBy(p => p.d).ToList();
             double[]                   sortedD       = sortedPairs.Select(p => p.d).ToArray();
             double[]                   sortedWeights = sortedPairs.Select(p => p.w).ToArray();
 
@@ -684,14 +775,13 @@ namespace LAsOsuBeatmapParser.Analysis
 
             double[] normCumWeights = cumWeights.Select(cw => cw / totalWeight).ToArray();
 
-            double[] targetPercentiles = [0.945, 0.935, 0.925, 0.915, 0.845, 0.835, 0.825, 0.815];
+            double[] targetPercentiles = [0.99, 0.98, 0.97, 0.96, 0.89, 0.88, 0.87, 0.86];
 
             double percentile93 = 0, percentile83 = 0;
 
             for (int i = 0; i < 4; i++)
             {
-                int idx                        = Array.BinarySearch(normCumWeights, targetPercentiles[i]);
-                if (idx < 0) idx               = ~idx;
+                int idx = BisectLeft(normCumWeights, targetPercentiles[i]);
                 if (idx >= sortedD.Length) idx = sortedD.Length - 1;
                 percentile93 += sortedD[idx];
             }
@@ -700,8 +790,7 @@ namespace LAsOsuBeatmapParser.Analysis
 
             for (int i = 4; i < 8; i++)
             {
-                int idx                        = Array.BinarySearch(normCumWeights, targetPercentiles[i]);
-                if (idx < 0) idx               = ~idx;
+                int idx = BisectLeft(normCumWeights, targetPercentiles[i]);
                 if (idx >= sortedD.Length) idx = sortedD.Length - 1;
                 percentile83 += sortedD[idx];
             }
@@ -711,13 +800,22 @@ namespace LAsOsuBeatmapParser.Analysis
             double weightedMean = Math.Pow(sortedD.Zip(sortedWeights, (d, w) => Math.Pow(d, 5) * w).Sum() / sortedWeights.Sum(), 1.0 / 5);
 
             double SR = (0.88 * percentile93 * 0.25) + (0.94 * percentile83 * 0.2) + (weightedMean * 0.55);
+            Console.WriteLine($"Before scaling: percentile_93={percentile93}, percentile_83={percentile83}, weighted_mean={weightedMean}, sr={SR}");
             SR = Math.Pow(SR, 1.0) / Math.Pow(8, 1.0) * 8;
+            Console.WriteLine($"After power scaling: sr={SR}");
 
-            double totalNotes = noteSeq.Length + (0.5 * LNSeq.Length);
+            // Match Python implementation: total_notes = len(note_seq) + 0.5*sum(min(t-h, 1000)/200 for LN)
+            double totalNotes = noteSeq.Length;
+            foreach (SRsNote ln in LNSeq)
+            {
+                double lnLength = Math.Min(ln.EndTime - ln.StartTime, 1000);
+                totalNotes += 0.5 * (lnLength / 200.0);
+            }
             SR *= totalNotes / (totalNotes + 60);
 
             SR =  RescaleHigh(SR);
             SR *= 0.975;
+            Console.WriteLine($"Final sr: {SR}");
 
             return SR;
         }
@@ -747,6 +845,143 @@ namespace LAsOsuBeatmapParser.Analysis
             Beatmap   beatmap = decoder.Decode(stream);
             Console.WriteLine($"C# parsed {beatmap.HitObjects.Count} hit objects");
             return CalculateSR(beatmap, out _);
+        }
+
+        private double[] ComputeAnchor(int K, double[][] keyUsage400, double[] baseCorners)
+        {
+            double[] anchor = new double[baseCorners.Length];
+            for (int idx = 0; idx < baseCorners.Length; idx++)
+            {
+                double[] counts = new double[K];
+                for (int k = 0; k < K; k++)
+                    counts[k] = keyUsage400[k][idx];
+                Array.Sort(counts);
+                Array.Reverse(counts);
+                double[] nonzero = counts.Where(c => c != 0).ToArray();
+                if (nonzero.Length > 1)
+                {
+                    double walk = 0;
+                    for (int i = 0; i < nonzero.Length - 1; i++)
+                    {
+                        double ratio = nonzero[i + 1] / nonzero[i];
+                        walk += nonzero[i] * (1 - 4 * Math.Pow((0.5 - ratio), 2));
+                    }
+                    double maxWalk = nonzero.Sum();
+                    anchor[idx] = walk / maxWalk;
+                }
+                else
+                {
+                    anchor[idx] = 0;
+                }
+            }
+            for (int idx = 0; idx < anchor.Length; idx++)
+                anchor[idx] = 1 + Math.Min(anchor[idx] - 0.18, 5 * Math.Pow(anchor[idx] - 0.22, 3));
+            return anchor;
+        }
+
+        private (double[], double[], double[]) GetCorners(int T, SRsNote[] noteSeq)
+        {
+            var cornersBase = new HashSet<double>();
+            foreach (var note in noteSeq)
+            {
+                cornersBase.Add(note.StartTime);
+                if (note.EndTime >= 0)
+                    cornersBase.Add(note.EndTime);
+            }
+            var temp = cornersBase.ToList();
+            foreach (double s in temp)
+            {
+                cornersBase.Add(s + 501);
+                cornersBase.Add(s - 499);
+                cornersBase.Add(s + 1);
+            }
+            cornersBase.Add(0);
+            cornersBase.Add(T);
+            var baseCorners = cornersBase.Where(s => s >= 0 && s <= T).OrderBy(s => s).ToArray();
+            var cornersA = new HashSet<double>();
+            foreach (var note in noteSeq)
+            {
+                cornersA.Add(note.StartTime);
+                if (note.EndTime >= 0)
+                    cornersA.Add(note.EndTime);
+            }
+            temp = cornersA.ToList();
+            foreach (double s in temp)
+            {
+                cornersA.Add(s + 1000);
+                cornersA.Add(s - 1000);
+            }
+            cornersA.Add(0);
+            cornersA.Add(T);
+            var A_corners = cornersA.Where(s => s >= 0 && s <= T).OrderBy(s => s).ToArray();
+            var allCorners = baseCorners.Union(A_corners).OrderBy(s => s).ToArray();
+            return (allCorners, baseCorners, A_corners);
+        }
+
+        private double[][] GetKeyUsage400(int K, int T, SRsNote[] noteSeq, double[] baseCorners)
+        {
+            var keyUsage400 = new double[K][];
+            for (int k = 0; k < K; k++)
+                keyUsage400[k] = new double[baseCorners.Length];
+            foreach (var note in noteSeq)
+            {
+                int k = note.Index;
+                double startTime = Math.Max(note.StartTime, 0);
+                double endTime = note.EndTime >= 0 ? Math.Min(note.EndTime, T - 1) : note.StartTime + 1500;
+                int left400_idx = Array.BinarySearch(baseCorners, startTime - 400);
+                if (left400_idx < 0) left400_idx = ~left400_idx;
+                int left_idx = Array.BinarySearch(baseCorners, startTime);
+                if (left_idx < 0) left_idx = ~left_idx;
+                int right_idx = Array.BinarySearch(baseCorners, endTime);
+                if (right_idx < 0) right_idx = ~right_idx;
+                int right400_idx = Array.BinarySearch(baseCorners, endTime + 400);
+                if (right400_idx < 0) right400_idx = ~right400_idx;
+                for (int idx = left_idx; idx < right_idx; idx++)
+                {
+                    double lnLength = Math.Min(endTime - startTime, 1500);
+                    keyUsage400[k][idx] += (3.75 + (lnLength / 150));
+                }
+                for (int idx = left400_idx; idx < left_idx; idx++)
+                {
+                    double dist = startTime - baseCorners[idx];
+                    keyUsage400[k][idx] += 3.75 - ((3.75 / (400 * 400)) * dist * dist);
+                }
+                for (int idx = right_idx; idx < right400_idx; idx++)
+                {
+                    double dist = baseCorners[idx] - endTime;
+                    keyUsage400[k][idx] += 3.75 - ((3.75 / (400 * 400)) * dist * dist);
+                }
+            }
+            return keyUsage400;
+        }
+
+        private double[] InterpValues(double[] newX, double[] oldX, double[] oldVals)
+        {
+            double[] result = new double[newX.Length];
+            for (int i = 0; i < newX.Length; i++)
+            {
+                double x = newX[i];
+                int idx = Array.BinarySearch(oldX, x);
+                if (idx >= 0)
+                    result[i] = oldVals[idx];
+                else
+                {
+                    idx = ~idx;
+                    if (idx == 0)
+                        result[i] = oldVals[0];
+                    else if (idx == oldX.Length)
+                        result[i] = oldVals[oldX.Length - 1];
+                    else
+                    {
+                        double x0 = oldX[idx - 1];
+                        double x1 = oldX[idx];
+                        double y0 = oldVals[idx - 1];
+                        double y1 = oldVals[idx];
+                        result[i] = y0 + ((y1 - y0) * (x - x0)) / (x1 - x0);
+                    }
+                }
+            }
+            return result;
         }
     }
 }

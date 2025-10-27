@@ -1,23 +1,8 @@
-use rayon::prelude::*;
-
-use crate::note::{Note, NoteComparerByT};
-use crate::cross_matrix::CrossMatrixProvider;
 use crate::parser::ParsedData;
 
 pub struct SRCalculator;
 
 impl SRCalculator {
-    const LAMBDA_N: f64 = 5.0;
-    const LAMBDA_1: f64 = 0.11;
-    const LAMBDA_3: f64 = 24.0;
-    const LAMBDA_2: f64 = 7.0;
-    const W_0: f64 = 0.4;
-    const W_1: f64 = 2.7;
-    const P_1: f64 = 1.5;
-    const W_2: f64 = 0.27;
-    const P_0: f64 = 1.0;
-    const GRANULARITY: i32 = 1;
-
     pub fn calculate_sr_from_parsed_data(data: &ParsedData) -> Result<f64, String> {
         let od = data.od;
         let k = data.column_count;
@@ -26,550 +11,470 @@ impl SRCalculator {
             return Err("Unsupported key count".to_string());
         }
 
-        let mut note_sequence: Vec<Note> = data.columns.iter().enumerate().map(|(i, &col)| {
+        // Build note_seq as in Python: list of (column, head_time, tail_time)
+        let mut note_seq: Vec<(i32, i32, i32)> = data.columns.iter().enumerate().map(|(i, &col)| {
             let h = data.note_starts[i];
             let t = if data.note_types[i] == 128 { data.note_ends[i] } else { -1 };
-            Note::new(col, h, t)
+            (col, h, t)
         }).collect();
 
-        if note_sequence.is_empty() {
+        if note_seq.is_empty() {
             return Ok(0.0);
         }
 
-        note_sequence.sort();
+        // Sort by (start_time, column) as in Python
+        note_seq.sort_by(|a, b| a.1.cmp(&b.1).then(a.0.cmp(&b.0)));
 
-        let x: f64 = 0.3 * ((64.5 - (od * 3.0).ceil()) / 500.0).sqrt();
+        // Hit leniency x - exactly as in Python
+        let x = 0.3 * ((64.5 - (od * 3.0).ceil()) / 500.0).sqrt();
         let x = x.min(0.6 * (x - 0.09) + 0.09);
 
-        let mut note_seq_by_column: Vec<Vec<Note>> = vec![vec![]; k as usize];
-        for note in &note_sequence {
-            if note.k >= 0 && (note.k as usize) < note_seq_by_column.len() {
-                note_seq_by_column[note.k as usize].push(*note);
-            }
+        // Group notes by column
+        let mut note_seq_by_column: Vec<Vec<(i32, i32, i32)>> = vec![vec![]; k as usize];
+        for &note in &note_seq {
+            note_seq_by_column[note.0 as usize].push(note);
         }
 
-        let ln_seq: Vec<Note> = note_sequence.iter().filter(|n| n.t >= 0).cloned().collect();
-        let mut ln_seq_sorted = ln_seq.clone();
-        ln_seq_sorted.sort_by(NoteComparerByT::cmp);
+        // LN sequences
+        let ln_seq: Vec<(i32, i32, i32)> = note_seq.iter().filter(|&&(_, _, t)| t >= 0).cloned().collect();
+        let mut tail_seq = ln_seq.clone();
+        tail_seq.sort_by(|a, b| a.2.cmp(&b.2)); // Sort by tail time
 
-        let t = note_sequence
-            .iter()
-            .map(|n| n.h)
-            .max()
-            .unwrap()
-            .max(note_sequence.iter().map(|n| n.t).max().unwrap())
-            + 1;
-
+                // Calculate T
+        let t = note_seq.iter().map(|&(_, h, t)| h.max(t)).max().unwrap() + 1;
         let t = if t > 1000000 { 1000000 } else { t };
 
-        let base_corners = Self::get_uniform_corners(t as f64);
+        // Get key usage
+        let key_usage = Self::get_key_usage(k, t, &note_seq);
 
-        let key_usage = Self::get_key_usage(k, t, &note_sequence, &base_corners);
-        let _active_columns: Vec<Vec<usize>> = (0..base_corners.len())
-            .map(|i| (0..k as usize).filter(|&col| key_usage[col][i]).collect())
-            .collect();
+        let base_corners: Vec<f64> = (0..t).map(|i| i as f64).collect();
+        let key_usage_400 = Self::get_key_usage_400(k, t, &note_seq, &base_corners);
+        let anchor = Self::compute_anchor(k, &key_usage_400, &base_corners);
 
-        let key_usage_400 = Self::get_key_usage_400(k, t, &note_sequence, &base_corners);
-        let _anchor = Self::compute_anchor(k, &key_usage_400, &base_corners);
+        let granularity = 1;
+        let all_corners: Vec<f64> = (0..t).step_by(granularity).map(|i| i as f64).collect();
+        let gap = granularity as f64;
+        let effective_weights: Vec<f64> = all_corners.iter().map(|&c| {
+            note_seq.iter().filter(|&(_, h, tail)| *h <= c as i32 && (if *tail < 0 { *h } else { *tail }) >= c as i32).count() as f64 * gap
+        }).collect();
+        let d_arr: Vec<f64> = effective_weights.iter().map(|&w| w / 1000.0).collect();
 
-        let (j_bar, delta_ks) = Self::calculate_section_23(k, &note_seq_by_column, &base_corners, x);
-        let j_bar_interp = j_bar.clone(); // No interpolation needed for uniform grid
+        // Compute Jbar and delta_ks
+        let (delta_ks, jbar) = Self::compute_jbar(k, t, x, &note_seq_by_column);
 
-        let x_bar = Self::calculate_section_24(k, &base_corners, &note_seq_by_column, x);
-        let x_bar_interp = x_bar.clone(); // No interpolation needed for uniform grid
+        // Compute Xbar
+        let xbar = Self::compute_xbar(k, t, x, &note_seq_by_column, &note_seq);
 
-        let _ln_rep = Self::ln_bodies_count_sparse_representation(&ln_seq, t);
+        // Compute Pbar
+        let pbar = Self::compute_pbar(k, t, x, &note_seq, &ln_seq, &anchor);
 
-        let p_bar = Self::calculate_section_25(&base_corners, &ln_seq_sorted, &note_sequence, x);
-        let p_bar_interp = p_bar.clone(); // No interpolation needed for uniform grid
+        // Compute Abar
+        let abar = Self::compute_abar(k, t, x, &note_seq_by_column, &key_usage, &delta_ks);
 
-        let (a_bar, _ks) = Self::calculate_section_26(&delta_ks, k, &base_corners, &note_sequence);
-        let a_bar_interp = a_bar.clone(); // No interpolation needed for uniform grid
+        // Compute Rbar
+        let rbar = Self::compute_rbar(k, t, x, &note_seq_by_column, &tail_seq);
 
-        let tail_seq: Vec<Note> = ln_seq_sorted.iter().cloned().collect();
-        let (r_bar, _) = Self::calculate_section_27(&ln_seq, &tail_seq, &base_corners, &note_seq_by_column, x);
-        let r_bar_interp = r_bar.clone(); // No interpolation needed for uniform grid
+        // Compute C and Ks
+        let (c_arr, _) = Self::compute_c_and_ks(k, t, &note_seq, &key_usage);
 
-        let (c_arr, ks_arr) = Self::compute_c_and_ks(k, t, &note_sequence, &key_usage, &base_corners);
-        let mut c_arr_interp = c_arr.clone(); // No interpolation needed for uniform grid
-        let ks_arr_f64: Vec<f64> = ks_arr.iter().map(|&x| x as f64).collect();
-        let ks_arr_interp = ks_arr_f64.clone(); // No interpolation needed for uniform grid
-
-        let sr = Self::calculate_final_sr(
-            &j_bar_interp,
-            &x_bar_interp,
-            &p_bar_interp,
-            &a_bar_interp,
-            &r_bar_interp,
-            &ks_arr_interp,
-            &mut c_arr_interp,
-            &base_corners,
-            &note_sequence,
-            &ln_seq_sorted,
-        );
-
-        Ok(sr)
+        // Final SR calculation
+        Ok(Self::calculate_final_sr(
+            &jbar,
+            &xbar,
+            &pbar,
+            &abar,
+            &rbar,
+            &d_arr,
+            &c_arr,
+            &note_seq,
+            &ln_seq,
+        ))
     }
 
-    pub fn calculate_section_23(
-        k: i32,
-        note_seq_by_column: &[Vec<Note>],
-        base_corners: &[f64],
-        x: f64,
-    ) -> (Vec<f64>, Vec<Vec<f64>>) {
-        let grid_size = base_corners.len();
-        let mut j_ks: Vec<Vec<f64>> = vec![vec![0.0; grid_size]; k as usize];
-        let mut delta_ks: Vec<Vec<f64>> = vec![vec![1e9; grid_size]; k as usize];
+    fn get_key_usage(k: i32, t: i32, note_seq: &[(i32, i32, i32)]) -> Vec<Vec<bool>> {
+        let mut key_usage = vec![vec![false; t as usize]; k as usize];
 
-        let x_pow_025 = x.sqrt().sqrt();
-        let lambda1_x = Self::LAMBDA_1 * x_pow_025;
-
-        // Parallel computation for each column
-        j_ks.par_iter_mut().zip(delta_ks.par_iter_mut()).enumerate().for_each(|(k_idx, (j_k, delta_k))| {
-            if k_idx < note_seq_by_column.len() && note_seq_by_column[k_idx].len() > 1 {
-                for i in 0..note_seq_by_column[k_idx].len() - 1 {
-                    let delta = 0.001
-                        * (note_seq_by_column[k_idx][i + 1].h - note_seq_by_column[k_idx][i].h)
-                            as f64;
-                    let abs_delta = (delta - 0.08).abs();
-                    let temp = 0.15 + abs_delta;
-                    let temp4 = temp * temp * temp * temp;
-                    let jack = 1.0 - 7e-5 * (1.0 / temp4);
-                    let val = (1.0 / (delta * (delta + lambda1_x))) * jack;
-
-                    let start = note_seq_by_column[k_idx][i].h as usize;
-                    let end = note_seq_by_column[k_idx][i + 1].h as usize;
-                    for s in start..end {
-                        if s < delta_k.len() {
-                            delta_k[s] = delta;
-                            j_k[s] = val;
-                        }
-                    }
-                }
-            }
-        });
-
-        let j_bar_ks: Vec<Vec<f64>> = j_ks.iter().map(|jk| Self::smooth(jk, grid_size as i32)).collect();
-
-        let mut j_bar = vec![0.0; grid_size];
-        for s in (0..grid_size).step_by(Self::GRANULARITY as usize) {
-            let mut weighted_sum = 0.0;
-            let mut weight_sum = 0.0;
-            for i in 0..k as usize {
-                let val = j_bar_ks[i][s];
-                let weight = 1.0 / delta_ks[i][s];
-                weight_sum += weight;
-                weighted_sum += val.max(0.0).powf(Self::LAMBDA_N) * weight;
-            }
-            weight_sum = weight_sum.max(1e-9);
-            j_bar[s] = (weighted_sum / weight_sum).powf(1.0 / Self::LAMBDA_N);
-        }
-
-        (j_bar, delta_ks)
-    }
-
-    pub fn calculate_section_24(k: i32, base_corners: &[f64], note_seq_by_column: &[Vec<Note>], x: f64) -> Vec<f64> {
-        let grid_size = base_corners.len();
-        let mut x_ks: Vec<Vec<f64>> = vec![vec![0.0; grid_size]; (k + 1) as usize];
-
-        for k_idx in 0..=(k as usize) {
-            let notes_in_pair = if k_idx == 0 {
-                note_seq_by_column.get(0).cloned().unwrap_or_default()
-            } else if k_idx == k as usize {
-                note_seq_by_column.last().cloned().unwrap_or_default()
+        for &(col, h, tail) in note_seq {
+            let start_time = (h - 150).max(0) as usize;
+            let end_time = if tail < 0 {
+                (h + 150).min(t - 1) as usize
             } else {
-                let left_col = k_idx - 1;
-                let right_col = k_idx;
-                let mut left_notes = note_seq_by_column
-                    .get(left_col)
-                    .cloned()
-                    .unwrap_or_default();
-                let mut right_notes = note_seq_by_column
-                    .get(right_col)
-                    .cloned()
-                    .unwrap_or_default();
-                left_notes.append(&mut right_notes);
-                left_notes.sort_by_key(|n| n.h);
-                left_notes
+                (tail + 150).min(t - 1) as usize
             };
 
+            for j in start_time..=end_time {
+                if j < key_usage[col as usize].len() {
+                    key_usage[col as usize][j] = true;
+                }
+            }
+        }
+
+        key_usage
+    }
+
+    fn get_key_usage_400(k: i32, _t: i32, note_seq: &[(i32, i32, i32)], base_corners: &[f64]) -> Vec<Vec<f64>> {
+        let mut key_usage_400 = vec![vec![0.0; base_corners.len()]; k as usize];
+        for &(col, h, tail) in note_seq {
+            let start_time = h as f64;
+            let end_time = if tail < 0 { h as f64 } else { tail as f64 };
+            let left400_idx = base_corners.partition_point(|&x| x < (start_time - 400.0));
+            let left_idx = base_corners.partition_point(|&x| x < start_time);
+            let right_idx = base_corners.partition_point(|&x| x < end_time);
+            let right400_idx = base_corners.partition_point(|&x| x < (end_time + 400.0));
+
+            // Add 3.75 + length contribution
+            let length = (end_time - start_time).min(1500.0);
+            for i in left_idx..right_idx {
+                key_usage_400[col as usize][i] += 3.75 + length / 150.0;
+            }
+
+            // Left fade
+            for i in left400_idx..left_idx {
+                let dist = start_time - base_corners[i];
+                key_usage_400[col as usize][i] += 3.75 - 3.75 / 400.0 / 400.0 * dist * dist;
+            }
+
+            // Right fade
+            for i in right_idx..right400_idx {
+                let dist = base_corners[i] - end_time;
+                key_usage_400[col as usize][i] += 3.75 - 3.75 / 400.0 / 400.0 * dist * dist;
+            }
+        }
+        key_usage_400
+    }
+
+    fn compute_anchor(k: i32, key_usage_400: &[Vec<f64>], base_corners: &[f64]) -> Vec<f64> {
+        let mut anchor = vec![0.0; base_corners.len()];
+        for i in 0..base_corners.len() {
+            let mut counts: Vec<f64> = (0..k as usize).map(|col| key_usage_400[col][i]).collect();
+            counts.sort_by(|a, b| b.partial_cmp(a).unwrap());
+            let nonzero: Vec<f64> = counts.into_iter().filter(|&x| x != 0.0).collect();
+            if nonzero.len() > 1 {
+                let mut walk = 0.0;
+                let mut max_walk = 0.0;
+                for j in 0..nonzero.len() - 1 {
+                    let factor = 1.0 - 4.0 * (0.5 - nonzero[j + 1] / nonzero[j]).powi(2);
+                    walk += nonzero[j] * factor;
+                    max_walk += nonzero[j];
+                }
+                anchor[i] = if max_walk > 0.0 { walk / max_walk } else { 0.0 };
+            }
+        }
+        // Apply scaling
+        for i in 0..anchor.len() {
+            anchor[i] = 1.0 + (anchor[i] - 0.18).min(5.0 * (anchor[i] - 0.22).powf(3.0));
+        }
+        anchor
+    }
+
+    fn compute_jbar(k: i32, t: i32, x: f64, note_seq_by_column: &[Vec<(i32, i32, i32)>]) -> (Vec<Vec<f64>>, Vec<f64>) {
+        let mut j_ks = vec![vec![0.0; t as usize]; k as usize];
+        let mut delta_ks = vec![vec![1e9; t as usize]; k as usize];
+
+        for col in 0..k as usize {
+            let notes = &note_seq_by_column[col];
+            for i in 0..notes.len() - 1 {
+                let (_, h1, _) = notes[i];
+                let (_, h2, _) = notes[i + 1];
+                let delta = 0.001 * (h2 - h1) as f64;
+
+                if delta < 1e-9 { continue; }
+
+                let x_pow_025 = x.powf(0.25);
+                let lambda1_x = 0.11 * x_pow_025;
+                let abs_delta = (delta - 0.08).abs();
+                let temp = 0.15 + abs_delta;
+                let temp4 = temp * temp * temp * temp;
+                let jack = 1.0 - 7e-5 / temp4;
+                let val = 1.0 / (delta * (delta + lambda1_x)) * jack;
+
+                let start = h1.max(0) as usize;
+                let end = h2.min(t - 1) as usize;
+
+                for j in start..end {
+                    j_ks[col][j] = val;
+                    delta_ks[col][j] = delta;
+                }
+            }
+        }
+
+        // Smooth each column's J_ks
+        let mut jbar_ks = vec![vec![0.0; t as usize]; k as usize];
+        for col in 0..k as usize {
+            jbar_ks[col] = Self::smooth(&j_ks[col], t);
+        }
+
+        // Aggregate across columns
+        let mut jbar = vec![0.0; t as usize];
+        for i in 0..t as usize {
+            let mut vals = vec![];
+            let mut weights = vec![];
+            for col in 0..k as usize {
+                let val = jbar_ks[col][i].max(0.0);
+                if val > 0.0 {
+                    vals.push(val.powf(5.0));
+                    weights.push(1.0 / delta_ks[col][i].max(1e-9));
+                }
+            }
+            if !weights.is_empty() {
+                let weighted_sum: f64 = vals.iter().zip(weights.iter()).map(|(v, w)| v * w).sum();
+                let total_weight: f64 = weights.iter().sum();
+                jbar[i] = (weighted_sum / total_weight).powf(1.0 / 5.0);
+            }
+        }
+
+        (delta_ks, jbar)
+    }
+
+    fn compute_xbar(k: i32, t: i32, x: f64, note_seq_by_column: &[Vec<(i32, i32, i32)>], note_seq: &[(i32, i32, i32)]) -> Vec<f64> {
+        let cross_matrices: Vec<Vec<f64>> = vec![
+            vec![-1.0],
+            vec![0.075, 0.075],
+            vec![0.125, 0.05, 0.125],
+            vec![0.125, 0.125, 0.125, 0.125],
+            vec![0.175, 0.25, 0.05, 0.25, 0.175],
+            vec![0.175, 0.25, 0.175, 0.175, 0.25, 0.175],
+            vec![0.225, 0.35, 0.25, 0.05, 0.25, 0.35, 0.225],
+            vec![0.225, 0.35, 0.25, 0.225, 0.225, 0.25, 0.35, 0.225],
+            vec![0.275, 0.45, 0.35, 0.25, 0.05, 0.25, 0.35, 0.45, 0.275],
+            vec![0.275, 0.45, 0.35, 0.25, 0.275, 0.275, 0.25, 0.35, 0.45, 0.275],
+            vec![0.625, 0.55, 0.45, 0.35, 0.25, 0.05, 0.25, 0.35, 0.45, 0.55, 0.625],
+            vec![-1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0],
+            vec![0.8, 0.8, 0.8, 0.6, 0.4, 0.2, 0.05, 0.2, 0.4, 0.6, 0.8, 0.8, 0.8],
+            vec![-1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0],
+            vec![0.4, 0.4, 0.2, 0.2, 0.3, 0.3, 0.1, 0.1, 0.3, 0.3, 0.2, 0.2, 0.4, 0.4, 0.4],
+            vec![-1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0],
+            vec![0.4, 0.4, 0.2, 0.2, 0.4, 0.4, 0.2, 0.1, 0.1, 0.2, 0.4, 0.4, 0.2, 0.2, 0.4, 0.4, 0.4],
+            vec![-1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0],
+            vec![0.4, 0.4, 0.2, 0.4, 0.2, 0.4, 0.2, 0.3, 0.1, 0.1, 0.3, 0.2, 0.4, 0.2, 0.4, 0.2, 0.4, 0.4, 0.4],
+        ];
+
+        let matrix = &cross_matrices[k as usize];
+        let mut x_ks = vec![vec![0.0; t as usize]; (k + 1) as usize];
+
+        let mut active_columns_t = vec![vec![false; k as usize]; t as usize];
+        for &(col, h, tail) in note_seq {
+            let start_time = (h - 150).max(0) as usize;
+            let end_time = if tail < 0 { (h + 150).min(t - 1) as usize } else { (tail + 150).min(t - 1) as usize };
+            for s in start_time..=end_time {
+                active_columns_t[s][col as usize] = true;
+            }
+        }
+
+        for col in 0..(k + 1) as usize {
+            let mut notes_in_pair = vec![];
+            if col == 0 {
+                if !note_seq_by_column.is_empty() {
+                    notes_in_pair = note_seq_by_column[0].clone();
+                }
+            } else if col == k as usize {
+                if !note_seq_by_column.is_empty() {
+                    notes_in_pair = note_seq_by_column[k as usize - 1].clone();
+                }
+            } else {
+                let left_col = col - 1;
+                let right_col = col;
+                let mut left_notes = if left_col < note_seq_by_column.len() { note_seq_by_column[left_col].clone() } else { vec![] };
+                let mut right_notes = if right_col < note_seq_by_column.len() { note_seq_by_column[right_col].clone() } else { vec![] };
+                left_notes.append(&mut right_notes);
+                left_notes.sort_by(|a, b| a.1.cmp(&b.1));
+                notes_in_pair = left_notes;
+            }
+
             for i in 1..notes_in_pair.len() {
-                let delta = 0.001 * (notes_in_pair[i].h - notes_in_pair[i - 1].h) as f64;
+                let (_, h1, _) = notes_in_pair[i - 1];
+                let (_, h2, _) = notes_in_pair[i];
+                let delta = 0.001 * (h2 - h1) as f64;
                 let max_xd = x.max(delta);
                 let val = 0.16 / (max_xd * max_xd);
 
-                let start = notes_in_pair[i - 1].h as usize;
-                let end = notes_in_pair[i].h as usize;
-                for s in start..end {
-                    if s < x_ks[k_idx].len() {
-                        x_ks[k_idx][s] = val;
-                    }
+                let start = h1.max(0) as usize;
+                let end = h2.min(t - 1) as usize;
+
+                for j in start..end {
+                    x_ks[col][j] = val;
                 }
             }
         }
 
-        let mut x_arr = vec![0.0; grid_size];
-        for s in (0..grid_size).step_by(Self::GRANULARITY as usize) {
-            x_arr[s] = 0.0;
-            for k_idx in 0..=(k as usize) {
-                x_arr[s] += x_ks[k_idx][s] * CrossMatrixProvider::get_matrix(k as usize).unwrap()[k_idx];
+        let mut x_base = vec![0.0; t as usize];
+        for i in 0..t as usize {
+            for col in 0..(k + 1) as usize {
+                x_base[i] += x_ks[col][i] * matrix[col];
             }
         }
 
-        Self::smooth(&x_arr, grid_size as i32)
+        Self::smooth(&x_base, t)
     }
 
-    pub fn calculate_section_25(base_corners: &[f64], ln_seq: &[Note], note_seq: &[Note], x: f64) -> Vec<f64> {
-        let grid_size = base_corners.len();
-        let mut p = vec![0.0; grid_size];
-        let mut ln_bodies = vec![0.0; grid_size];
+    fn compute_pbar(_k: i32, t: i32, x: f64, note_seq: &[(i32, i32, i32)], ln_seq: &[(i32, i32, i32)], anchor: &Vec<f64>) -> Vec<f64> {
+        let mut ln_bodies = vec![0.0; t as usize];
 
-        ln_seq.par_iter().for_each(|note| {
-            let t1 = (note.h + 80).min(note.t);
-            for time in note.h..t1 {
-                if time >= 0 && (time as usize) < grid_size {
-                    // Atomic add would be needed for thread safety, but for simplicity using sequential
-                }
-            }
-            for time in t1..note.t {
-                if time >= 0 && (time as usize) < grid_size {
-                    // Same issue
-                }
-            }
-        });
-
-        // Simplified implementation - need proper parallel accumulation
-        for note in ln_seq {
-            let t1 = (note.h + 80).min(note.t);
-            for time in note.h..t1 {
+        for &(_, h, tail) in ln_seq {
+            let t1 = (h + 80).min(tail);
+            for time in h..t1 {
                 if time >= 0 && (time as usize) < ln_bodies.len() {
                     ln_bodies[time as usize] += 0.5;
                 }
             }
-            for time in t1..note.t {
+            for time in t1..tail {
                 if time >= 0 && (time as usize) < ln_bodies.len() {
                     ln_bodies[time as usize] += 1.0;
                 }
             }
         }
 
-        let mut prefix_sum_ln_bodies = vec![0.0; grid_size + 1];
-        for i in 1..=grid_size {
-            prefix_sum_ln_bodies[i] = prefix_sum_ln_bodies[i - 1] + ln_bodies[i - 1];
+        let mut prefix_sum_ln = vec![0.0; (t + 1) as usize];
+        for i in 1..=t as usize {
+            prefix_sum_ln[i] = prefix_sum_ln[i - 1] + ln_bodies[i - 1];
         }
 
-        let b = |delta: f64| {
-            let val = 7.5 / delta;
-            if val > 160.0 && val < 360.0 {
-                let diff = val - 160.0;
-                let diff2 = val - 360.0;
-                1.0 + 1.4e-7 * diff * (diff2 * diff2)
-            } else {
-                1.0
-            }
-        };
-
-        let lambda2_scaled = Self::LAMBDA_2 * 0.001;
+        let mut p = vec![0.0; t as usize];
 
         for i in 0..note_seq.len() - 1 {
-            let delta = 0.001 * (note_seq[i + 1].h - note_seq[i].h) as f64;
-            if delta < 1e-9 {
-                if (note_seq[i].h as usize) < p.len() {
-                    p[note_seq[i].h as usize] +=
-                        1000.0 * (0.02 * (4.0 / x - Self::LAMBDA_3)).sqrt().sqrt();
+            let (_, h1, _) = note_seq[i];
+            let (_, h2, _) = note_seq[i + 1];
+            let delta_time = (h2 - h1) as f64;
+
+            if delta_time < 1e-9 {
+                let spike = 1000.0 * (0.02 * (4.0 / x - 24.0)).powf(0.25);
+                let spike_start = h1.max(0) as usize;
+                let spike_end = ((h1 + 1).min(t)) as usize;
+                for j in spike_start..spike_end {
+                    p[j] += spike;
                 }
+                continue;
+            }
+
+            let delta = 0.001 * delta_time;
+            let ln_sum = prefix_sum_ln[h2.min(t) as usize] - prefix_sum_ln[h1.max(0) as usize];
+            let v = 1.0 + 6.0 * 0.001 * ln_sum;
+
+            let mut b_val = 1.0;
+            let temp_val = 7.5 / delta;
+            if temp_val > 160.0 && temp_val < 360.0 {
+                let diff = temp_val - 160.0;
+                let diff2 = temp_val - 360.0;
+                b_val = 1.0 + 1.7e-7 * diff * diff2 * diff2;
+            }
+
+            let inc;
+            if delta < 2.0 * x / 3.0 {
+                let temp = 1.0 - 24.0 * (delta - x / 2.0) * (delta - x / 2.0) / x;
+                inc = 1.0 / delta * (0.08 / x * temp).powf(0.25) * b_val.max(v);
             } else {
-                let h_l = note_seq[i].h as usize;
-                let h_r = note_seq[i + 1].h as usize;
-                let v =
-                    1.0 + lambda2_scaled * (prefix_sum_ln_bodies[h_r] - prefix_sum_ln_bodies[h_l]);
+                let temp = 1.0 - 24.0 * (x / 6.0) * (x / 6.0) / x;
+                inc = 1.0 / delta * (0.08 / x * temp).powf(0.25) * b_val.max(v);
+            }
 
-                let base_val = if delta < 2.0 * x / 3.0 {
-                    (0.08 / x * (1.0 - Self::LAMBDA_3 / x * (delta - x / 2.0) * (delta - x / 2.0)))
-                        .sqrt()
-                        .sqrt()
-                        * b(delta)
-                        * v
-                        / delta
-                } else {
-                    (0.08 / x * (1.0 - Self::LAMBDA_3 / x * (x / 6.0) * (x / 6.0)))
-                        .sqrt()
-                        .sqrt()
-                        * b(delta)
-                        * v
-                        / delta
-                };
+            let p_start = h1.max(0) as usize;
+            let p_end = h2.min(t - 1) as usize;
 
-                for s in h_l..h_r {
-                    if s < p.len() {
-                        p[s] += base_val;
-                    }
-                }
+            for j in p_start..p_end {
+                p[j] += (inc * anchor[j]).min(inc.max(inc * 2.0 - 10.0));
             }
         }
 
-        Self::smooth(&p, grid_size as i32)
+        Self::smooth(&p, t)
     }
 
-    pub fn calculate_section_26(
-        delta_ks: &[Vec<f64>],
-        k: i32,
-        base_corners: &[f64],
-        note_seq: &[Note],
-    ) -> (Vec<f64>, Vec<i32>) {
-        let grid_size = base_corners.len();
-        if delta_ks.is_empty() || k <= 0 || grid_size == 0 {
-            return (vec![1.0; grid_size], vec![1i32; grid_size]);
-        }
-        let mut ku_ks: Vec<Vec<bool>> = vec![vec![false; grid_size]; k as usize];
+    fn compute_abar(k: i32, t: i32, _x: f64, _note_seq_by_column: &[Vec<(i32, i32, i32)>], key_usage: &[Vec<bool>], delta_ks: &[Vec<f64>]) -> Vec<f64> {
+        let mut a = vec![1.0; t as usize];
 
-        // Sequential processing for ku_ks
-        for note in note_seq {
-            let start_time = (note.h - 500).max(0) as usize;
-            let end_time = if note.t < 0 {
-                (note.h + 500).min((grid_size - 1) as i32) as usize
-            } else {
-                (note.t + 500).min((grid_size - 1) as i32) as usize
-            };
-            for s in start_time..end_time {
-                if note.k >= 0
-                    && (note.k as usize) < ku_ks.len()
-                    && s < ku_ks[note.k as usize].len()
-                {
-                    ku_ks[note.k as usize][s] = true;
-                }
-            }
-        }
-
-        let mut ks = vec![0i32; grid_size];
-        let mut a = vec![1.0; grid_size];
-
-        let mut dks: Vec<Vec<f64>> = vec![vec![0.0; grid_size]; k as usize];
-
-        for s in (0..grid_size).step_by(Self::GRANULARITY as usize) {
+        for s in 0..t as usize {
             let mut cols = vec![];
-            for k_idx in 0..k as usize {
-                if ku_ks[k_idx][s] {
-                    cols.push(k_idx);
+            for col in 0..k as usize {
+                if key_usage[col][s] {
+                    cols.push(col);
                 }
             }
-            ks[s] = cols.len().max(1) as i32;
 
             for i in 0..cols.len().saturating_sub(1) {
                 let col1 = cols[i];
                 let col2 = cols[i + 1];
-                if col1 >= delta_ks.len()
-                    || col2 >= delta_ks.len()
-                    || s >= delta_ks[col1].len()
-                    || s >= delta_ks[col2].len()
-                    || col1 >= dks.len()
-                    || s >= dks[col1].len()
-                {
-                    continue;
-                }
-                let delta1 = delta_ks[col1][s];
-                let delta2 = delta_ks[col2][s];
-                dks[col1][s] = (delta1 - delta2).abs() + (delta1.max(delta2) - 0.3).max(0.0);
 
-                let max_delta = delta1.max(delta2);
-                if dks[col1][s] < 0.02 {
+                let dk = (delta_ks[col1][s] - delta_ks[col2][s]).abs() +
+                         (delta_ks[col1][s].max(delta_ks[col2][s]) - 0.3).max(0.0);
+
+                let max_delta = delta_ks[col1][s].max(delta_ks[col2][s]);
+
+                if dk < 0.02 {
                     a[s] *= (0.75 + 0.5 * max_delta).min(1.0);
-                } else if dks[col1][s] < 0.07 {
-                    a[s] *= (0.65 + 5.0 * dks[col1][s] + 0.5 * max_delta).min(1.0);
+                } else if dk < 0.07 {
+                    a[s] *= (0.65 + 5.0 * dk + 0.5 * max_delta).min(1.0);
                 }
             }
         }
 
-        let a_bar = Self::smooth(&a, grid_size as i32);
-        (a_bar, ks)
+        Self::smooth(&a, t)
     }
 
-    pub fn calculate_section_27(
-        ln_seq: &[Note],
-        tail_seq: &[Note],
-        base_corners: &[f64],
-        note_seq_by_column: &[Vec<Note>],
-        x: f64,
-    ) -> (Vec<f64>, Vec<f64>) {
-        let mut i_arr = vec![0.0; ln_seq.len()];
+    fn compute_rbar(_k: i32, t: i32, x: f64, note_seq_by_column: &[Vec<(i32, i32, i32)>], tail_seq: &[(i32, i32, i32)]) -> Vec<f64> {
+        let mut i_vals = vec![0.0; tail_seq.len()];
 
-        i_arr.par_iter_mut().enumerate().for_each(|(i, i_val)| {
-            let k = tail_seq[i].k;
-            let h_i = tail_seq[i].h;
-            let t_i = tail_seq[i].t;
+        for i in 0..tail_seq.len() {
+            let (k, h_i, t_i) = tail_seq[i];
+            let column_notes = if (k as usize) < note_seq_by_column.len() { &note_seq_by_column[k as usize] } else { &vec![] };
 
-            let column_notes = note_seq_by_column
-                .get(k as usize)
-                .cloned()
-                .unwrap_or_default();
-            let next_note = Self::find_next_note_in_column(&tail_seq[i], &column_notes);
-            let h_j = next_note.h;
+            // Find next note in column
+            let mut next_note_time = i32::MAX;
+            for &(_, h_j, _) in column_notes {
+                if h_j > t_i && h_j < next_note_time {
+                    next_note_time = h_j;
+                }
+            }
 
             let i_h = 0.001 * ((t_i - h_i - 80) as f64).abs() / x;
-            let i_t = 0.001 * ((h_j - t_i - 80) as f64).abs() / x;
-            *i_val = 2.0 / (2.0 + (-5.0 * (i_h - 0.75)).exp() + (-5.0 * (i_t - 0.75)).exp());
-        });
+            let i_t = 0.001 * ((next_note_time - t_i - 80) as f64).abs() / x;
+            i_vals[i] = 2.0 / (2.0 + (-5.0 * (i_h - 0.75)).exp() + (-5.0 * (i_t - 0.75)).exp());
+        }
 
-        let grid_size = base_corners.len();
-        let mut is_arr = vec![0.0; grid_size];
-        let mut r = vec![0.0; grid_size];
+        let mut r = vec![0.0; t as usize];
 
         for i in 0..tail_seq.len().saturating_sub(1) {
-            let delta_r = 0.001 * (tail_seq[i + 1].t - tail_seq[i].t) as f64;
-            let is_val = 1.0 + i_arr[i];
-            let r_val = 0.08
-                * delta_r.powf(-0.5)
-                * x.powf(-1.0)
-                * (1.0 + 0.8 * (i_arr[i] + i_arr.get(i + 1).copied().unwrap_or(0.0)));
+            let (_, _, t_i) = tail_seq[i];
+            let (_, _, t_next) = tail_seq[i + 1];
+            let delta_r = 0.001 * (t_next - t_i) as f64;
+            let r_val = 0.08 * delta_r.powf(-0.5) / x * (1.0 + 0.8 * (i_vals[i] + i_vals[i + 1]));
 
-            let start = tail_seq[i].t as usize;
-            let end = tail_seq[i + 1].t as usize;
+            let start = t_i.max(0) as usize;
+            let end = t_next.min(t - 1) as usize;
+
             for s in start..end {
-                if s < is_arr.len() {
-                    is_arr[s] = is_val;
+                r[s] = r_val;
+            }
+        }
+
+        Self::smooth(&r, t)
+    }
+
+    fn compute_c_and_ks(k: i32, t: i32, note_seq: &[(i32, i32, i32)], key_usage: &[Vec<bool>]) -> (Vec<f64>, Vec<f64>) {
+        // C(s): count of notes within 500 ms
+        let mut note_hit_times: Vec<f64> = note_seq.iter().map(|&(_, h, _)| h as f64 / 1000.0).collect();
+        note_hit_times.sort_by(|a, b| a.partial_cmp(b).unwrap());
+
+        let mut c_step = vec![0.0; t as usize];
+        for i in 0..t as usize {
+            let low = i as f64 - 500.0;
+            let high = i as f64 + 500.0;
+            let left = note_hit_times.partition_point(|&time| time < low);
+            let right = note_hit_times.partition_point(|&time| time < high);
+            c_step[i] = (right - left) as f64;
+        }
+
+        // Ks: local key usage count
+        let mut ks_step = vec![0.0; t as usize];
+        for i in 0..t as usize {
+            let mut count = 0;
+            for col in 0..k as usize {
+                if key_usage[col][i] {
+                    count += 1;
                 }
-                if s < r.len() {
-                    r[s] = r_val;
-                }
             }
+            ks_step[i] = count.max(1) as f64;
         }
 
-        let r_bar = Self::smooth(&r, grid_size as i32);
-        (r_bar, is_arr)
-    }
-
-    fn find_next_note_in_column(note: &Note, column_notes: &[Note]) -> Note {
-        let index = column_notes.partition_point(|n| n.h <= note.h);
-
-        if index < column_notes.len() {
-            column_notes[index]
-        } else {
-            Note::new(0, 1_000_000_000, 1_000_000_000)
-        }
-    }
-
-    pub fn calculate_section_3(
-        j_bar: Vec<f64>,
-        x_bar: Vec<f64>,
-        p_bar: Vec<f64>,
-        a_bar: Vec<f64>,
-        r_bar: Vec<f64>,
-        ks: Vec<i32>,
-        t: i32,
-        note_seq: &[Note],
-        ln_seq: &[Note],
-    ) -> f64 {
-        let mut c = vec![0.0; t as usize];
-        let mut start = 0;
-        let mut end = 0;
-
-        for time in 0..t as usize {
-            while start < note_seq.len() && note_seq[start].h < time as i32 - 500 {
-                start += 1;
-            }
-            while end < note_seq.len() && note_seq[end].h < time as i32 + 500 {
-                end += 1;
-            }
-            c[time] = (end - start) as f64;
-        }
-
-        let mut s = vec![0.0; t as usize];
-        let mut d = vec![0.0; t as usize];
-
-        for time in 0..t as usize {
-            let j_bar_val = j_bar[time].max(0.0);
-            let x_bar_val = x_bar[time].max(0.0);
-            let p_bar_val = p_bar[time].max(0.0);
-            let a_bar_val = a_bar[time].max(0.0);
-            let r_bar_val = r_bar[time].max(0.0);
-
-            let term1 = Self::W_0
-                * (a_bar_val.powf(3.0 / ks[time] as f64) * j_bar_val.min(8.0 + 0.85 * j_bar_val))
-                    .powf(1.5);
-            let term2 = (1.0 - Self::W_0)
-                * (a_bar_val.powf(2.0 / 3.0)
-                    * (0.8 * p_bar_val + r_bar_val * 35.0 / (c[time] + 8.0)))
-                    .powf(1.5);
-            s[time] = (term1 + term2).powf(2.0 / 3.0);
-
-            let t_t =
-                a_bar_val.powf(3.0 / ks[time] as f64) * x_bar_val / (x_bar_val + s[time] + 1.0);
-            d[time] = Self::W_1 * s[time].powf(0.5) * t_t.powf(Self::P_1) + s[time] * Self::W_2;
-        }
-
-        let mut c = c.to_vec();
-        Self::forward_fill(&mut d);
-        Self::forward_fill(&mut c);
-
-        // New percentile-based calculation
-        let d_list: Vec<f64> = d.clone();
-        let weights: Vec<f64> = c.clone();
-
-        // Sort D by value, keep weights
-        let mut sorted_pairs: Vec<(f64, f64)> =
-            d_list.into_iter().zip(weights.into_iter()).collect();
-        sorted_pairs.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
-
-        let sorted_d: Vec<f64> = sorted_pairs.iter().map(|(d, _)| *d).collect();
-        let sorted_weights: Vec<f64> = sorted_pairs.iter().map(|(_, w)| *w).collect();
-
-        // Cumulative weights
-        let total_weight: f64 = sorted_weights.iter().sum();
-        let mut cum_weights = vec![0.0; sorted_weights.len()];
-        cum_weights[0] = sorted_weights[0];
-        for i in 1..cum_weights.len() {
-            cum_weights[i] = cum_weights[i - 1] + sorted_weights[i];
-        }
-
-        let norm_cum_weights: Vec<f64> = cum_weights.iter().map(|cw| cw / total_weight).collect();
-
-        let target_percentiles = [0.945, 0.935, 0.925, 0.915, 0.845, 0.835, 0.825, 0.815];
-
-        let mut percentile93 = 0.0;
-        for i in 0..4 {
-            let idx = norm_cum_weights
-                .binary_search_by(|&x| x.partial_cmp(&target_percentiles[i]).unwrap()).unwrap_or_else(|idx| idx)
-            .min(sorted_d.len() - 1);
-            percentile93 += sorted_d[idx];
-        }
-        percentile93 /= 4.0;
-
-        let mut percentile83 = 0.0;
-        for i in 4..8 {
-            let idx = norm_cum_weights
-                .binary_search_by(|&x| x.partial_cmp(&target_percentiles[i]).unwrap()).unwrap_or_else(|idx| idx)
-            .min(sorted_d.len() - 1);
-            percentile83 += sorted_d[idx];
-        }
-        percentile83 /= 4.0;
-
-        let weighted_mean = (sorted_d
-            .iter()
-            .zip(sorted_weights.iter())
-            .map(|(d, w)| d.powf(5.0) * w)
-            .sum::<f64>()
-            / sorted_weights.iter().sum::<f64>())
-        .powf(1.0 / 5.0);
-
-        let mut sr = 0.88 * percentile93 * 0.25 + 0.94 * percentile83 * 0.2 + weighted_mean * 0.55;
-        sr = sr.powf(Self::P_0) / 8.0f64.powf(Self::P_0) * 8.0;
-        let total_notes = note_seq.len() as f64 + 0.5 * ln_seq.len() as f64;
-        sr *= total_notes / (total_notes + 60.0);
-
-        sr = Self::rescale_high(sr);
-        sr *= 0.975;
-        sr
-    }
-
-    fn forward_fill(array: &mut [f64]) {
-        let mut last_valid_value = 0.0;
-        for val in array.iter_mut() {
-            if !val.is_nan() && *val != 0.0 {
-                last_valid_value = *val;
-            } else {
-                *val = last_valid_value;
-            }
-        }
+        (c_step, ks_step)
     }
 
     fn smooth(lst: &[f64], t: i32) -> Vec<f64> {
@@ -578,226 +483,72 @@ impl SRCalculator {
             prefix_sum[i] = prefix_sum[i - 1] + lst[i - 1];
         }
 
-        let mut lst_bar = vec![0.0; t as usize];
-        for s in (0..t as usize).step_by(Self::GRANULARITY as usize) {
+        let mut result = vec![0.0; t as usize];
+        for s in 0..(t as usize) {
             let left = (s as i32 - 500).max(0) as usize;
-            let right = (s as i32 + 500).min(t) as usize;
+            let right = ((s + 500) as i32).min(t) as usize;
             let sum = prefix_sum[right] - prefix_sum[left];
-            lst_bar[s] = 0.001 * sum;
-        }
-        lst_bar
-    }
-
-    fn rescale_high(sr: f64) -> f64 {
-        if sr <= 9.0 {
-            sr
-        } else {
-            9.0 + (sr - 9.0) * (1.0 / 1.2)
-        }
-    }
-
-    pub fn get_uniform_corners(t: f64) -> Vec<f64> {
-        let mut corners = Vec::new();
-        let mut current = 0.0;
-        while current < t {
-            corners.push(current);
-            current += 1.0;
-        }
-        corners
-    }
-
-    pub fn get_key_usage(k: i32, t: i32, note_seq: &[Note], base_corners: &[f64]) -> Vec<Vec<bool>> {
-        let mut key_usage = vec![vec![false; base_corners.len()]; k as usize];
-        for note in note_seq {
-            let start_time = (note.h as f64 - 150.0).max(0.0);
-            let end_time = if note.t < 0 {
-                note.h as f64 + 150.0
-            } else {
-                (note.t as f64 + 150.0).min(t as f64 - 1.0)
-            };
-            let left_idx = base_corners.partition_point(|&x| x < start_time);
-            let right_idx = base_corners.partition_point(|&x| x < end_time);
-            for idx in left_idx..right_idx {
-                if idx < key_usage[note.k as usize].len() {
-                    key_usage[note.k as usize][idx] = true;
-                }
-            }
-        }
-        key_usage
-    }
-
-    pub fn get_key_usage_400(k: i32, _t: i32, note_seq: &[Note], base_corners: &[f64]) -> Vec<Vec<f64>> {
-        let mut key_usage_400 = vec![vec![0.0; base_corners.len()]; k as usize];
-        for note in note_seq {
-            let start_time = note.h as f64;
-            let end_time = if note.t < 0 {
-                note.h as f64
-            } else {
-                note.t as f64
-            };
-            let left400_idx = base_corners.partition_point(|&x| x < start_time - 400.0);
-            let left_idx = base_corners.partition_point(|&x| x < start_time);
-            let right_idx = base_corners.partition_point(|&x| x < end_time);
-            let right400_idx = base_corners.partition_point(|&x| x < end_time + 400.0);
-            for idx in left_idx..right_idx {
-                if idx < key_usage_400[note.k as usize].len() {
-                    key_usage_400[note.k as usize][idx] += 3.75 + ((end_time - start_time).min(1500.0) / 150.0);
-                }
-            }
-            for idx in left400_idx..left_idx {
-                if idx < key_usage_400[note.k as usize].len() {
-                    let delta = start_time - base_corners[idx];
-                    key_usage_400[note.k as usize][idx] += 3.75 - 3.75 / 400.0_f64.powi(2) * delta.powi(2);
-                }
-            }
-            for idx in right_idx..right400_idx {
-                if idx < key_usage_400[note.k as usize].len() {
-                    let delta = base_corners[idx] - end_time;
-                    key_usage_400[note.k as usize][idx] += 3.75 - 3.75 / 400.0_f64.powi(2) * delta.powi(2);
-                }
-            }
-        }
-        key_usage_400
-    }
-
-    pub fn compute_anchor(k: i32, key_usage_400: &[Vec<f64>], _base_corners: &[f64]) -> Vec<f64> {
-        let mut anchor = vec![0.0; key_usage_400[0].len()];
-        for idx in 0..anchor.len() {
-            let mut counts: Vec<f64> = (0..k as usize).map(|ki| key_usage_400[ki][idx]).collect();
-            counts.sort_by(|a, b| b.partial_cmp(a).unwrap()); // descending
-            let nonzero_counts: Vec<f64> = counts.into_iter().filter(|&x| x != 0.0).collect();
-            if nonzero_counts.len() > 1 {
-                let walk: f64 = nonzero_counts.iter().enumerate().skip(1).map(|(i, &c)| (nonzero_counts[i-1] - c) * (1.0 - 4.0 * (0.5 - c / nonzero_counts[i-1]).powi(2))).sum();
-                let max_walk: f64 = nonzero_counts.iter().sum();
-                anchor[idx] = walk / max_walk;
-            } else {
-                anchor[idx] = 0.0;
-            }
-        }
-        anchor = anchor.iter().map(|&a| 1.0 + (a - 0.18).min(5.0 * (a - 0.22).powi(3))).collect();
-        anchor
-    }
-
-    pub fn ln_bodies_count_sparse_representation(ln_seq: &[Note], t: i32) -> (Vec<f64>, Vec<f64>, Vec<f64>) {
-        let mut diff: std::collections::HashMap<i32, f64> = std::collections::HashMap::new();
-        for note in ln_seq {
-            let t0 = (note.h as f64 + 60.0).min(note.t as f64) as i32;
-            let t1 = (note.h as f64 + 120.0).min(note.t as f64) as i32;
-            *diff.entry(t0).or_insert(0.0) += 1.3;
-            *diff.entry(t1).or_insert(0.0) += -1.3 + 1.0; // net change at t1: -1.3 from first part, then +1
-            *diff.entry(note.t).or_insert(0.0) -= 1.0;
+            result[s] = 0.001 * sum;
         }
 
-        let mut points: Vec<i32> = vec![0, t];
-        points.extend(diff.keys().cloned());
-        points.sort();
-        points.dedup();
-
-        let mut values = Vec::new();
-        let mut cumsum = vec![0.0];
-        let mut curr = 0.0;
-
-        for i in 0..points.len() - 1 {
-            let t_point = points[i];
-            if let Some(&change) = diff.get(&t_point) {
-                curr += change;
-            }
-            let v = curr.min(2.5 + 0.5 * curr);
-            values.push(v);
-            let seg_length = (points[i + 1] - points[i]) as f64;
-            cumsum.push(cumsum.last().unwrap() + seg_length * v);
-        }
-        (points.into_iter().map(|x| x as f64).collect(), cumsum, values)
+        result
     }
 
-    pub fn interp_values(new_x: &[f64], old_x: &[f64], old_vals: &[f64]) -> Vec<f64> {
-        new_x.iter().map(|&x| {
-            if x <= old_x[0] {
-                old_vals[0]
-            } else if x >= old_x[old_x.len() - 1] {
-                old_vals[old_vals.len() - 1]
-            } else {
-                let idx = old_x.partition_point(|&val| val < x) - 1;
-                if idx >= old_x.len() - 1 {
-                    old_vals[old_vals.len() - 1]
-                } else {
-                    let x1 = old_x[idx];
-                    let x2 = old_x[idx + 1];
-                    let y1 = old_vals[idx];
-                    let y2 = old_vals[idx + 1];
-                    y1 + (y2 - y1) * (x - x1) / (x2 - x1)
-                }
-            }
-        }).collect()
-    }
-
-    pub fn step_interp(new_x: &[f64], old_x: &[f64], old_vals: &[f64]) -> Vec<f64> {
-        new_x.iter().map(|&x| {
-            let idx = old_x.partition_point(|&val| val <= x).saturating_sub(1);
-            old_vals[idx.min(old_vals.len() - 1)]
-        }).collect()
-    }
-
-    pub fn compute_c_and_ks(k: i32, _t: i32, note_seq: &[Note], key_usage: &[Vec<bool>], base_corners: &[f64]) -> (Vec<f64>, Vec<i32>) {
-        let mut note_hit_times: Vec<i32> = note_seq.iter().map(|n| n.h).collect();
-        note_hit_times.sort();
-
-        let c_step: Vec<f64> = base_corners.iter().map(|&s| {
-            let low = s - 500.0;
-            let high = s + 500.0;
-            let left = note_hit_times.partition_point(|&time| (time as f64) < low);
-            let right = note_hit_times.partition_point(|&time| (time as f64) < high);
-            (right - left) as f64
-        }).collect();
-
-        let ks_step: Vec<i32> = (0..base_corners.len()).map(|i| {
-            let count: i32 = (0..k as usize).map(|col| key_usage[col][i] as i32).sum();
-            count.max(1)
-        }).collect();
-
-        (c_step, ks_step)
-    }
-
-    pub fn calculate_final_sr(
-        j_bar: &[f64],
-        x_bar: &[f64],
-        p_bar: &[f64],
-        a_bar: &[f64],
-        r_bar: &[f64],
-        ks: &[f64],
-        c: &mut [f64],
-        all_corners: &[f64],
-        note_seq: &[Note],
-        ln_seq: &[Note],
+    fn calculate_final_sr(
+        jbar: &[f64],
+        xbar: &[f64],
+        pbar: &[f64],
+        abar: &[f64],
+        rbar: &[f64],
+        d_arr: &[f64],
+        c: &[f64],
+        note_seq: &[(i32, i32, i32)],
+        ln_seq: &[(i32, i32, i32)],
     ) -> f64 {
-        let mut s = vec![0.0; all_corners.len()];
-        let mut d = vec![0.0; all_corners.len()];
+        println!("calculate_final_sr called");
+        let len = jbar.len();
+        let mut s = vec![0.0; len];
+        let mut d = vec![0.0; len];
 
-        for i in 0..all_corners.len() {
-            let j_bar_val = j_bar[i].max(0.0);
-            let x_bar_val = x_bar[i].max(0.0);
-            let p_bar_val = p_bar[i].max(0.0);
-            let a_bar_val = a_bar[i].max(0.0);
-            let r_bar_val = r_bar[i].max(0.0);
-            let ks_val = ks[i];
+        for i in 0..len {
+            let j_val = jbar[i].max(0.0);
+            let x_val = xbar[i].max(0.0);
+            let p_val = pbar[i].max(0.0);
+            let a_val = abar[i].max(0.0);
+            let r_val = rbar[i].max(0.0);
+            let ks_val = d_arr[i];
             let c_val = c[i];
 
-            let term1 = Self::W_0 * (a_bar_val.powf(3.0 / ks_val) * j_bar_val.min(8.0 + 0.85 * j_bar_val)).powf(1.5);
-            let term2 = (1.0 - Self::W_0) * (a_bar_val.powf(2.0 / 3.0) * (0.8 * p_bar_val + r_bar_val * 35.0 / (c_val + 8.0))).powf(1.5);
+            let term1 = 0.4 * (a_val.powf(3.0 / ks_val) * j_val.min(8.0 + 0.85 * j_val)).powf(1.5);
+            let term2 = (1.0 - 0.4) * (a_val.powf(2.0 / 3.0) * (0.8 * p_val + r_val * 35.0 / (c_val + 8.0))).powf(1.5);
             s[i] = (term1 + term2).powf(2.0 / 3.0);
 
-            let t_t = a_bar_val.powf(3.0 / ks_val) * x_bar_val / (x_bar_val + s[i] + 1.0);
-            d[i] = Self::W_1 * s[i].powf(0.5) * t_t.powf(Self::P_1) + s[i] * Self::W_2;
+            let t_t = a_val.powf(3.0 / ks_val) * x_val / (x_val + s[i] + 1.0);
+            d[i] = 2.7 * s[i].powf(0.5) * t_t.powf(1.5) + s[i] * 0.27;
         }
 
-        Self::forward_fill(&mut d);
-        Self::forward_fill(c);
+        // Forward fill
+        let mut last_valid = 0.0;
+        for i in 0..d.len() {
+            if d[i] != 0.0 {
+                last_valid = d[i];
+            } else {
+                d[i] = last_valid;
+            }
+        }
 
-        // Use C values directly as weights (matching C# implementation)
-        let effective_weights: Vec<f64> = c.iter().map(|&c_val| c_val).collect();
+        let mut c_mut = c.to_vec();
+        let mut last_valid_c = 0.0;
+        for i in 0..c_mut.len() {
+            if c_mut[i] != 0.0 {
+                last_valid_c = c_mut[i];
+            } else {
+                c_mut[i] = last_valid_c;
+            }
+        }
 
-        // Percentile calculation
-        let mut d_with_weights: Vec<(f64, f64)> = d.iter().zip(effective_weights.iter()).map(|(&d_val, &w)| (d_val, w)).collect();
+        // Calculate percentiles
+        let mut d_with_weights: Vec<(f64, f64)> = d.iter().zip(c_mut.iter()).map(|(&d_val, &c_val)| (d_val, c_val)).collect();
         d_with_weights.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
 
         let sorted_d: Vec<f64> = d_with_weights.iter().map(|(d, _)| *d).collect();
@@ -806,11 +557,11 @@ impl SRCalculator {
         let total_weight: f64 = sorted_weights.iter().sum();
         let mut cum_weights = vec![0.0; sorted_weights.len()];
         for i in 0..sorted_weights.len() {
-            cum_weights[i] = if i == 0 { sorted_weights[i] } else { cum_weights[i-1] + sorted_weights[i] };
+            cum_weights[i] = if i == 0 { sorted_weights[i] } else { cum_weights[i - 1] + sorted_weights[i] };
         }
         let norm_cum_weights: Vec<f64> = cum_weights.iter().map(|&cw| cw / total_weight).collect();
 
-        let target_percentiles = [0.945, 0.935, 0.925, 0.915, 0.845, 0.835, 0.825, 0.815];
+        let target_percentiles = [0.99, 0.98, 0.97, 0.96, 0.89, 0.88, 0.87, 0.86];
 
         let mut percentile_93 = 0.0;
         for &p in &target_percentiles[..4] {
@@ -830,16 +581,29 @@ impl SRCalculator {
             .map(|(d, w)| d.powf(5.0) * w).sum::<f64>() / sorted_weights.iter().sum::<f64>())
             .powf(1.0 / 5.0);
 
-        let mut sr = 0.88 * percentile_93 * 0.25 + 0.94 * percentile_83 * 0.2 + weighted_mean * 0.55;
+        let mut sr = percentile_93;
+        println!("DEBUG: percentile_93={}, sr={}", percentile_93, sr);
         println!("Before scaling: percentile_93={}, percentile_83={}, weighted_mean={}, sr={}", percentile_93, percentile_83, weighted_mean, sr);
-        sr = sr.powf(Self::P_0) / 8.0f64.powf(Self::P_0) * 8.0;
-        println!("After power scaling: sr={}", sr);
+        sr = sr.powf(1.0) / 8.0f64.powf(1.0) * 8.0;
 
-        let total_notes = note_seq.len() as f64 + 0.5 * ln_seq.len() as f64;
+        let mut total_notes = note_seq.len() as f64;
+        for &(_, h, t) in ln_seq {
+            let ln_length = ((t - h) as f64).min(1000.0);
+            total_notes += 0.5 * (ln_length / 200.0);
+        }
         sr *= total_notes / (total_notes + 60.0);
 
         sr = Self::rescale_high(sr);
         sr *= 0.975;
+        println!("Final sr: {}", sr);
         sr
+    }
+
+    fn rescale_high(sr: f64) -> f64 {
+        if sr <= 9.0 {
+            sr
+        } else {
+            9.0 + (sr - 9.0) * (1.0 / 1.2)
+        }
     }
 }

@@ -28,10 +28,18 @@ pub extern "C" fn calculate_sr_from_osu_file(path_ptr: *const c_char, len: usize
         Err(_) => return -1.0, // Error indicator
     };
 
+    println!("Rust: Received path: {}", path_str);
+
     // Calculate SR
     match SRAPI::calculate_sr(path_str) {
-        Ok(sr) => sr,
-        Err(_) => -1.0, // Error indicator
+        Ok(sr) => {
+            println!("Rust: Calculated SR: {}", sr);
+            sr
+        },
+        Err(e) => {
+            println!("Rust: Error calculating SR: {}", e);
+            -1.0 // Error indicator
+        }
     }
 }
 

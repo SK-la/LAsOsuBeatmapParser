@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Text;
 using BenchmarkDotNet.Attributes;
 using LAsOsuBeatmapParser.Analysis;
 using LAsOsuBeatmapParser.Beatmaps;
@@ -17,10 +16,7 @@ namespace LAsOsuBeatmapParser.Tests
     public class RustSRCalculatorTests
     {
         // 测试文件路径定义
-        private static readonly string TestResourceDir = Path.Combine(
-            AppDomain.CurrentDomain.BaseDirectory,
-            "..", "..", "..", "Resource"
-        );
+        private static readonly string TestResourceDir = @"E:\BASE CODE\GitHub\LAsOsuBeatmapParser\tests\Resource";
 
         private static readonly string SingleTestFile = Path.Combine(
             TestResourceDir,
@@ -34,25 +30,7 @@ namespace LAsOsuBeatmapParser.Tests
         {
             _output = output;
         }
-
-        [Fact]
-        public void TestRust_AllMethods_Consistency_SingleFile()
-        {
-            // Arrange
-            Assert.True(File.Exists(SingleTestFile), $"Test file not found: {SingleTestFile}");
-
-            // Act
-            var stopwatch = Stopwatch.StartNew();
-            double? srFile = SRCalculatorRust.CalculateSR_FromFile(SingleTestFile);
-            stopwatch.Stop();
-
-            // Assert
-            Assert.NotNull(srFile);
-            Assert.True(srFile > 0);
-
-            _output.WriteLine($"Rust SR Calculator FromFile: {srFile:F4} in {stopwatch.ElapsedMilliseconds}ms");
-        }
-
+        
         [Fact]
         public void TestRust_Performance_MultipleFiles()
         {
@@ -61,7 +39,7 @@ namespace LAsOsuBeatmapParser.Tests
 
             var decoder = new LegacyBeatmapDecoder();
 
-            var results = new List<(double Cs, double? Sr, long TimeMs)>();
+            var results = new List<(double Cs, double? RustSr, long RustTime, double? CsSr, long CsTime, double? PySr, long PyTime)>();
 
             // Act
             foreach (string filePath in TestFiles)
@@ -69,26 +47,48 @@ namespace LAsOsuBeatmapParser.Tests
                 Beatmap beatmap = decoder.Decode(filePath);
                 double  cs      = beatmap.BeatmapInfo.Difficulty.CircleSize;
 
+                // Rust
                 var     stopwatch = Stopwatch.StartNew();
-                double? sr        = SRCalculatorRust.CalculateSR_FromFile(filePath);
+                double? rustSr    = SRCalculatorRust.CalculateSR_FromFile(filePath);
                 stopwatch.Stop();
+                long rustTime = stopwatch.ElapsedMilliseconds;
 
-                results.Add((cs, sr, stopwatch.ElapsedMilliseconds));
+                // C#
+                stopwatch.Restart();
+                double csSr = SRCalculator.Instance.CalculateSR(beatmap, out _);
+                stopwatch.Stop();
+                long csTime = stopwatch.ElapsedMilliseconds;
 
-                Assert.NotNull(sr);
-                Assert.True(sr > 0);
+                // Python
+                stopwatch.Restart();
+                double? pySr = SRCalculatorPython.CalculateSR_FromFile(filePath);
+                stopwatch.Stop();
+                long pyTime = stopwatch.ElapsedMilliseconds;
+
+                results.Add((cs, rustSr, rustTime, csSr, csTime, pySr, pyTime));
+
+                Assert.NotNull(rustSr);
+                Assert.True(rustSr > 0);
+                Assert.True(csSr > 0);
+                Assert.NotNull(pySr);
+                Assert.True(pySr > 0);
             }
 
             // Output results
-            _output.WriteLine("Rust SR Performance Results:");
-            _output.WriteLine("CS | SR | Time (ms)");
-            _output.WriteLine("---|-----|----------");
+            _output.WriteLine("SR Performance Results:");
+            _output.WriteLine("CS | Rust SR | C# SR | Py SR | Rust Time | C# Time | Py Time");
+            _output.WriteLine("---|---------|-------|-------|-----------|---------|---------");
 
-            foreach ((double cs, double? sr, long timeMs) in results) _output.WriteLine($"{cs,-3:F1} | {sr:F4} | {timeMs,8}");
+            foreach ((double cs, double? rustSr, long rustTime, double? csSr, long csTime, double? pySr, long pyTime) in results)
+                _output.WriteLine($"{cs,-3:F1} | {rustSr:F4} | {csSr:F4} | {pySr:F4} | {rustTime,9} | {csTime,7} | {pyTime,7}");
 
-            double avgTime = results.Average(r => r.TimeMs);
+            double avgRustTime = results.Average(r => r.RustTime);
+            double avgCsTime   = results.Average(r => r.CsTime);
+            double avgPyTime   = results.Average(r => r.PyTime);
 
-            _output.WriteLine($"Average Time: {avgTime:F2}ms");
+            _output.WriteLine($"Average Rust Time: {avgRustTime:F2}ms");
+            _output.WriteLine($"Average C# Time: {avgCsTime:F2}ms");
+            _output.WriteLine($"Average Py Time: {avgPyTime:F2}ms");
             _output.WriteLine($"Total Files: {results.Count}");
         }
     }
