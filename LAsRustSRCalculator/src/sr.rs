@@ -548,7 +548,7 @@ impl SRCalculator {
         }
 
         // Calculate percentiles
-        let mut d_with_weights: Vec<(f64, f64)> = d.iter().zip(c_mut.iter()).map(|(&d_val, &c_val)| (d_val, c_val)).collect();
+        let mut d_with_weights: Vec<(f64, f64)> = d.iter().map(|&d_val| (d_val, 1.0)).collect();
         d_with_weights.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
 
         let sorted_d: Vec<f64> = d_with_weights.iter().map(|(d, _)| *d).collect();
@@ -561,7 +561,7 @@ impl SRCalculator {
         }
         let norm_cum_weights: Vec<f64> = cum_weights.iter().map(|&cw| cw / total_weight).collect();
 
-        let target_percentiles = [0.99, 0.98, 0.97, 0.96, 0.89, 0.88, 0.87, 0.86];
+        let target_percentiles = [0.945, 0.935, 0.925, 0.915, 0.845, 0.835, 0.825, 0.815];
 
         let mut percentile_93 = 0.0;
         for &p in &target_percentiles[..4] {
@@ -577,11 +577,9 @@ impl SRCalculator {
         }
         percentile_83 /= 4.0;
 
-        let weighted_mean = (sorted_d.iter().zip(sorted_weights.iter())
-            .map(|(d, w)| d.powf(5.0) * w).sum::<f64>() / sorted_weights.iter().sum::<f64>())
-            .powf(1.0 / 5.0);
+        let weighted_mean = (sorted_d.iter().map(|d| d.powf(5.0)).sum::<f64>() / sorted_d.len() as f64).powf(1.0 / 5.0);
 
-        let mut sr = percentile_93;
+        let mut sr = 0.88 * percentile_93 * 0.25 + 0.94 * percentile_83 * 0.2 + weighted_mean * 0.55;
         println!("DEBUG: percentile_93={}, sr={}", percentile_93, sr);
         println!("Before scaling: percentile_93={}, percentile_83={}, weighted_mean={}, sr={}", percentile_93, percentile_83, weighted_mean, sr);
         sr = sr.powf(1.0) / 8.0f64.powf(1.0) * 8.0;

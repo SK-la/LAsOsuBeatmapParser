@@ -764,7 +764,8 @@ namespace LAsOsuBeatmapParser.Analysis
             // Sort D by value, keep weights
             List<(double d, double w)> sortedPairs   = dList.Zip(wList, (d, w) => (d, w)).OrderBy(p => p.d).ToList();
             double[]                   sortedD       = sortedPairs.Select(p => p.d).ToArray();
-            double[]                   sortedWeights = sortedPairs.Select(p => p.w).ToArray();
+            double[]                   sortedWeights = new double[sortedD.Length];
+            Array.Fill(sortedWeights, 1.0);
 
             // Cumulative weights
             double   totalWeight = sortedWeights.Sum();
@@ -775,7 +776,7 @@ namespace LAsOsuBeatmapParser.Analysis
 
             double[] normCumWeights = cumWeights.Select(cw => cw / totalWeight).ToArray();
 
-            double[] targetPercentiles = [0.99, 0.98, 0.97, 0.96, 0.89, 0.88, 0.87, 0.86];
+            double[] targetPercentiles = [0.945, 0.935, 0.925, 0.915, 0.845, 0.835, 0.825, 0.815];
 
             double percentile93 = 0, percentile83 = 0;
 
@@ -797,7 +798,7 @@ namespace LAsOsuBeatmapParser.Analysis
 
             percentile83 /= 4;
 
-            double weightedMean = Math.Pow(sortedD.Zip(sortedWeights, (d, w) => Math.Pow(d, 5) * w).Sum() / sortedWeights.Sum(), 1.0 / 5);
+            double weightedMean = Math.Pow(sortedD.Sum(d => Math.Pow(d, 5)) / sortedD.Length, 1.0 / 5);
 
             double SR = (0.88 * percentile93 * 0.25) + (0.94 * percentile83 * 0.2) + (weightedMean * 0.55);
             Console.WriteLine($"Before scaling: percentile_93={percentile93}, percentile_83={percentile83}, weighted_mean={weightedMean}, sr={SR}");

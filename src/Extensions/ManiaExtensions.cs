@@ -28,11 +28,8 @@ namespace LAsOsuBeatmapParser.Extensions
         /// <returns>列号（0-based）。</returns>
         public static int GetColumnFromX(int totalColumn, float x)
         {
-            // 修正逆运算：直接计算，不需要额外的+1和-1
-            double offset = 256.0 / totalColumn;
-            double ratio  = 512.0 / totalColumn;
-            double result = (x - offset) / ratio;
-            return (int)Math.Round(result);
+            // 正确公式：floor(x * totalColumn / 512)
+            return (int)Math.Floor(x * totalColumn / 512.0);
         }
     }
 }
