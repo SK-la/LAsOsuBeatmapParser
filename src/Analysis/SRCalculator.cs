@@ -267,11 +267,10 @@ namespace LAsOsuBeatmapParser.Analysis
             {
                 int col = note.Index;
                 int startTime = note.StartTime;
-                int endTime = note.EndTime >= 0 ? note.EndTime : startTime;
-
-                int startIdx = Array.BinarySearch(baseCorners, startTime - 150);
+                int endTime = note.EndTime >= 0 ? Math.Min(note.EndTime + 150, t - 1) : startTime + 150;
+                int startIdx = Array.BinarySearch(baseCorners, Math.Max(startTime - 150, 0));
                 if (startIdx < 0) startIdx = ~startIdx;
-                int endIdx = Array.BinarySearch(baseCorners, endTime + 150);
+                int endIdx = Array.BinarySearch(baseCorners, endTime);
                 if (endIdx < 0) endIdx = ~endIdx;
 
                 for (int idx = startIdx; idx < endIdx; idx++)
@@ -455,17 +454,44 @@ namespace LAsOsuBeatmapParser.Analysis
             {
                 int col = note.Index;
                 int startTime = note.StartTime;
-                int endTime = note.EndTime >= 0 ? note.EndTime : startTime;
+                int endTime = note.EndTime >= 0 ? Math.Min(note.EndTime, t - 1) : startTime;
+                int left400Idx = Array.BinarySearch(baseCorners, startTime - 400);
+                if (left400Idx < 0) left400Idx = ~left400Idx;
+                int leftIdx = Array.BinarySearch(baseCorners, startTime);
+                if (leftIdx < 0) leftIdx = ~leftIdx;
+                int rightIdx = Array.BinarySearch(baseCorners, endTime);
+                if (rightIdx < 0) rightIdx = ~rightIdx;
+                int right400Idx = Array.BinarySearch(baseCorners, endTime + 400);
+                if (right400Idx < 0) right400Idx = ~right400Idx;
 
-                int startIdx = Array.BinarySearch(baseCorners, startTime - 400);
-                if (startIdx < 0) startIdx = ~startIdx;
-                int endIdx = Array.BinarySearch(baseCorners, endTime + 400);
-                if (endIdx < 0) endIdx = ~endIdx;
-
-                for (int idx = startIdx; idx < endIdx; idx++)
+                // idx = np.arange(left_idx, right_idx)
+                for (int idx = leftIdx; idx < rightIdx; idx++)
                 {
                     if (idx >= 0 && idx < baseCorners.Length)
-                        keyUsage400[col][idx] = 1.0;
+                    {
+                        double lnLength = note.EndTime >= 0 ? note.EndTime - note.StartTime : 0;
+                        keyUsage400[col][idx] += 3.75 + Math.Min(lnLength, 1500) / 150;
+                    }
+                }
+
+                // idx = np.arange(left400_idx, left_idx)
+                for (int idx = left400Idx; idx < leftIdx; idx++)
+                {
+                    if (idx >= 0 && idx < baseCorners.Length)
+                    {
+                        double dist = baseCorners[idx] - startTime;
+                        keyUsage400[col][idx] += 3.75 - 3.75 / (400 * 400) * (dist * dist);
+                    }
+                }
+
+                // idx = np.arange(right_idx, right400_idx)
+                for (int idx = rightIdx; idx < right400Idx; idx++)
+                {
+                    if (idx >= 0 && idx < baseCorners.Length)
+                    {
+                        double dist = Math.Abs(baseCorners[idx] - endTime);
+                        keyUsage400[col][idx] += 3.75 - 3.75 / (400 * 400) * (dist * dist);
+                    }
                 }
             }
 

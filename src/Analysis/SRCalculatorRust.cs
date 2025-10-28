@@ -33,9 +33,9 @@ namespace LAsOsuBeatmapParser.Analysis
                 Marshal.FreeHGlobal(pathPtr);
 
                 // Check for error (negative values indicate errors)
-                if (result < 0.0)
+                if (result < 0.0 || double.IsNaN(result))
                 {
-                    Console.WriteLine($"Rust SR calculation returned negative value: {result}");
+                    Console.WriteLine($"Rust SR calculation returned invalid value: {result}");
                     return null;
                 }
 
@@ -44,7 +44,8 @@ namespace LAsOsuBeatmapParser.Analysis
             catch (Exception ex)
             {
                 // Return null on any error (including Rust panics)
-                throw new Exception($"Error calling Rust DLL: {ex.Message}");
+                // throw new Exception($"Error calling Rust DLL: {ex.Message}");
+                return null;
             }
         }
     }

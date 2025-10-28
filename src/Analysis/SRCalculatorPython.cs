@@ -17,12 +17,13 @@ namespace LAsOsuBeatmapParser.Analysis
             "..", "..", "..", "..", "..", "Star-Rating-Rebirth", "srcalc-script.py"
         );
 
-        // Python可执行文件路径 - 使用系统PATH中的python
-        private static readonly string PythonExecutable = "python";
+        // Python可执行文件路径 - 使用系统PATH中的python，注意修改为自己的
+        private static readonly string PythonExecutable = "py";
 
         public static double? CalculateSR_FromFile(string filePath)
         {
             Console.WriteLine("Starting Python SR calculation");
+
             if (string.IsNullOrEmpty(filePath) || !File.Exists(filePath))
             {
                 throw new Exception($"File not found: {filePath}");
@@ -63,6 +64,7 @@ namespace LAsOsuBeatmapParser.Analysis
 
                     // 启动Python进程
                     using var process = Process.Start(startInfo);
+
                     if (process == null)
                     {
                         Console.WriteLine("无法启动Python进程");
@@ -75,6 +77,7 @@ namespace LAsOsuBeatmapParser.Analysis
 
                     // 等待进程完成或超时
                     bool exited = process.WaitForExit(10000); // 10秒超时
+
                     if (!exited)
                     {
                         Console.WriteLine("Python进程超时，强制终止");
@@ -91,9 +94,12 @@ namespace LAsOsuBeatmapParser.Analysis
                         return null;
                     }
 
+                    Console.WriteLine($"Python Stdout: {output}");
+                    Console.WriteLine($"Python Stderr: {error}");
+
                     // 解析输出中的SR值
-                    // 输出格式: "(NM) filename | 6.1037"
                     var match = Regex.Match(output, @"\([A-Z]+\)\s+.*?\s+\|\s+([0-9]+\.?[0-9]*)");
+
                     if (match.Success && double.TryParse(match.Groups[1].Value, out double sr))
                     {
                         return sr;

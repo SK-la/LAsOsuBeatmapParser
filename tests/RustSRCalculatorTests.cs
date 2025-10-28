@@ -35,7 +35,7 @@ namespace LAsOsuBeatmapParser.Tests
         }
 
         [Fact]
-        public void TestRust_Performance_MultipleFiles()
+        public void Test_Performance_MultipleFiles()
         {
             // Arrange
             Assert.NotEmpty(TestFiles);
@@ -57,7 +57,7 @@ namespace LAsOsuBeatmapParser.Tests
                 long rustTime = stopwatch.ElapsedMilliseconds;
 
                 // C#
-                stopwatch.Restart();
+                stopwatch = Stopwatch.StartNew();
                 double csSr = SRCalculator.Instance.CalculateSR(beatmap, out _);
                 stopwatch.Stop();
                 long csTime = stopwatch.ElapsedMilliseconds;
@@ -80,8 +80,7 @@ namespace LAsOsuBeatmapParser.Tests
             {
                 _output.WriteLine($"{cs,-3:F1} | {rustSr:F4} | {csSr:F4} | {pySr:F4} | {rustTime,9} | {csTime,7} | {pyTime,7}");
 
-                // Assert.True(rustSr - pySr < 0.001);
-                // Assert.True(csSr - pySr < 0.001);
+                Console.WriteLine($"{cs,-3:F1} | {rustSr:F4} | {csSr:F4} | {pySr:F4} | {rustTime,9} | {csTime,7} | {pyTime,7}");
             }
 
             double avgRustTime = results.Average(r => r.RustTime);
@@ -92,6 +91,20 @@ namespace LAsOsuBeatmapParser.Tests
             _output.WriteLine($"Average C# Time: {avgCsTime:F2}ms");
             _output.WriteLine($"Average Py Time: {avgPyTime:F2}ms");
             _output.WriteLine($"Total Files: {results.Count}");
+
+            // Assert after printing the table
+            foreach ((double cs, double? rustSr, long rustTime, double? csSr, long csTime, double? pySr, long pyTime) in results)
+            {
+                if (rustSr.HasValue && pySr.HasValue && !double.IsNaN(rustSr.Value) && !double.IsNaN(pySr.Value))
+                {
+                    Assert.True(Math.Abs(rustSr.Value - pySr.Value) < 0.0001, $"Rust SR {rustSr.Value} vs Python {pySr.Value}");
+                }
+
+                if (csSr.HasValue && pySr.HasValue && !double.IsNaN(csSr.Value) && !double.IsNaN(pySr.Value))
+                {
+                    Assert.True(Math.Abs(csSr.Value - pySr.Value) < 0.0001, $"C# SR {csSr.Value} vs Python {pySr.Value}");
+                }
+            }
         }
     }
 
