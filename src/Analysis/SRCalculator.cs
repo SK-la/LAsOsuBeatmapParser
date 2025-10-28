@@ -23,11 +23,11 @@ namespace LAsOsuBeatmapParser.Analysis
         private const double lambda_3 = 24;
         private const double lambda_2 = 7.0;
         private const double lambda_4 = 0.1;
-        private const double w_0      = 0.4;
-        private const double w_1      = 2.7;
-        private const double p_1      = 1.5;
-        private const double w_2      = 0.27;
-        private const double p_0      = 1.0;
+        private const double w_0 = 0.4;
+        private const double w_1 = 2.7;
+        private const double p_1 = 1.5;
+        private const double w_2 = 0.27;
+        private const double p_0 = 1.0;
 
         private const int granularity = 1; // 只能保持为1，确保精度不变，不可修改
 
@@ -45,7 +45,7 @@ namespace LAsOsuBeatmapParser.Analysis
         /// <returns>SR值</returns>
         public double CalculateSRFromFileCS(string filePath)
         {
-            var     decoder = new LegacyBeatmapDecoder();
+            var decoder = new LegacyBeatmapDecoder();
             Beatmap beatmap = decoder.Decode(filePath);
             Console.WriteLine($"C# parsed {beatmap.HitObjects.Count} hit objects");
             return CalculateSR(beatmap, out _);
@@ -58,9 +58,9 @@ namespace LAsOsuBeatmapParser.Analysis
         /// <returns>SR值</returns>
         public double CalculateSRFromContentCS(string content)
         {
-            var       decoder = new LegacyBeatmapDecoder();
-            using var stream  = new MemoryStream(Encoding.UTF8.GetBytes(content));
-            Beatmap   beatmap = decoder.Decode(stream);
+            var decoder = new LegacyBeatmapDecoder();
+            using var stream = new MemoryStream(Encoding.UTF8.GetBytes(content));
+            Beatmap beatmap = decoder.Decode(stream);
             Console.WriteLine($"C# parsed {beatmap.HitObjects.Count} hit objects");
             return CalculateSR(beatmap, out _);
         }
@@ -76,7 +76,7 @@ namespace LAsOsuBeatmapParser.Analysis
         {
             Task<(double sr, Dictionary<string, long> times)> task = CalculateSRAsync(beatmap);
             (double sr, Dictionary<string, long> t) = task.Result; // 同步等待（用于兼容旧接口）
-            times                                   = t;
+            times = t;
             return sr;
         }
 
@@ -88,9 +88,9 @@ namespace LAsOsuBeatmapParser.Analysis
         /// <returns></returns>
         public async Task<(double sr, Dictionary<string, long> times)> CalculateSRAsync<T>(IBeatmap<T> beatmap) where T : HitObject
         {
-            double od       = beatmap.BeatmapInfo.Difficulty.OverallDifficulty;
-            int    keyCount = (int)beatmap.BeatmapInfo.Difficulty.CircleSize;
-            var    times    = new Dictionary<string, long>();
+            double od = beatmap.BeatmapInfo.Difficulty.OverallDifficulty;
+            int keyCount = (int)beatmap.BeatmapInfo.Difficulty.CircleSize;
+            var times = new Dictionary<string, long>();
 
             // Check if key count is supported (max 18 keys, even numbers only for K>10)
             if (keyCount > 18 || keyCount < 1 || (keyCount > 10 && keyCount % 2 == 1)) return (-1, times); // Return invalid SR
@@ -98,11 +98,11 @@ namespace LAsOsuBeatmapParser.Analysis
             try
             {
                 var totalStopwatch = Stopwatch.StartNew(); // 总时间计时开始
-                var noteSequence   = new List<SRsNote>();
+                var noteSequence = new List<SRsNote>();
 
                 foreach (T hitObject in beatmap.HitObjects)
                 {
-                    int col  = hitObject is ManiaHitObject maniaHit ? maniaHit.Column : ManiaExtensions.GetColumnFromX(keyCount, hitObject.Position.X);
+                    int col = hitObject is ManiaHitObject maniaHit ? maniaHit.Column : ManiaExtensions.GetColumnFromX(keyCount, hitObject.Position.X);
                     int time = (int)hitObject.StartTime;
                     int tail = hitObject.EndTime > hitObject.StartTime ? (int)hitObject.EndTime : -1;
                     noteSequence.Add(new SRsNote(col, time, tail));
@@ -123,10 +123,12 @@ namespace LAsOsuBeatmapParser.Analysis
                 double x = 0.3 * Math.Sqrt((64.5 - Math.Ceiling(od * 3)) / 500);
                 x = Math.Min(x, (0.6 * (x - 0.09)) + 0.09);
                 SRsNote[][] noteSeqByColumn = new SRsNote[keyCount][];
+
                 for (int k = 0; k < keyCount; k++)
                 {
                     noteSeqByColumn[k] = new SRsNote[0];
                 }
+
                 foreach (var group in noteSeq.GroupBy(n => n.Index))
                 {
                     noteSeqByColumn[group.Key] = group.ToArray();
@@ -141,7 +143,7 @@ namespace LAsOsuBeatmapParser.Analysis
                         lnCount++;
                 }
 
-                var LNSeq   = new SRsNote[lnCount];
+                var LNSeq = new SRsNote[lnCount];
                 int lnIndex = 0;
 
                 foreach (SRsNote note in noteSeq)
@@ -193,6 +195,7 @@ namespace LAsOsuBeatmapParser.Analysis
 
                 // Effective weights
                 var effectiveWeights = new double[allCorners.Length];
+
                 for (int i = 0; i < allCorners.Length; i++)
                 {
                     effectiveWeights[i] = cArrInterp[i] * gaps[i];
@@ -200,6 +203,7 @@ namespace LAsOsuBeatmapParser.Analysis
 
                 // Compute D_all
                 var dAll = new double[allCorners.Length];
+
                 for (int i = 0; i < allCorners.Length; i++)
                 {
                     double term1 = 0.4 * Math.Pow(Math.Pow(abar[i], 3.0 / ksArrInterp[i]) * Math.Min(jbar[i], 8 + (0.85 * jbar[i])), 1.5);
@@ -229,26 +233,31 @@ namespace LAsOsuBeatmapParser.Analysis
         private static double[] GetAllCorners(int totalTime)
         {
             var corners = new List<double>();
+
             for (int i = 0; i < totalTime; i += granularity)
             {
                 corners.Add(i);
             }
+
             return corners.ToArray();
         }
 
         private static double[] GetBaseCorners(int totalTime)
         {
             var corners = new List<double>();
+
             for (int i = 0; i < totalTime; i++)
             {
                 corners.Add(i);
             }
+
             return corners.ToArray();
         }
 
         private static bool[][] GetKeyUsage(int k, int t, SRsNote[] noteSeq, double[] baseCorners)
         {
             var keyUsage = new bool[k][];
+
             for (int i = 0; i < k; i++)
             {
                 keyUsage[i] = new bool[baseCorners.Length];
@@ -278,9 +287,11 @@ namespace LAsOsuBeatmapParser.Analysis
         private static List<int>[] GetActiveColumns(int k, bool[][] keyUsage)
         {
             var activeColumns = new List<int>[keyUsage[0].Length];
+
             for (int i = 0; i < activeColumns.Length; i++)
             {
                 activeColumns[i] = new List<int>();
+
                 for (int j = 0; j < k; j++)
                 {
                     if (keyUsage[j][i])
@@ -289,12 +300,14 @@ namespace LAsOsuBeatmapParser.Analysis
                     }
                 }
             }
+
             return activeColumns;
         }
 
         private static double[][] GetKeyUsage400(int k, int t, SRsNote[] noteSeq, double[] baseCorners)
         {
             var keyUsage400 = new double[k][];
+
             for (int i = 0; i < k; i++)
             {
                 keyUsage400[i] = new double[baseCorners.Length];
@@ -326,10 +339,12 @@ namespace LAsOsuBeatmapParser.Analysis
             for (int i = 0; i < baseCorners.Length; i++)
             {
                 double sum = 0;
+
                 for (int j = 0; j < k; j++)
                 {
                     sum += keyUsage400[j][i] * crossMatrix[j];
                 }
+
                 anchor[i] = sum;
             }
 
@@ -344,6 +359,7 @@ namespace LAsOsuBeatmapParser.Analysis
             for (int i = 0; i < baseCorners.Length; i++)
             {
                 int count = 0;
+
                 for (int j = 0; j < k; j++)
                 {
                     if (keyUsage[j][i])
@@ -351,6 +367,7 @@ namespace LAsOsuBeatmapParser.Analysis
                         count++;
                     }
                 }
+
                 cArr[i] = count;
                 ksArr[i] = count;
             }
@@ -364,9 +381,11 @@ namespace LAsOsuBeatmapParser.Analysis
             if (allCorners.Length == 0) return gaps;
 
             gaps[0] = allCorners.Length > 1 ? (allCorners[1] - allCorners[0]) / 2.0 : allCorners[0] / 2.0;
+
             if (allCorners.Length > 1)
             {
                 gaps[allCorners.Length - 1] = (allCorners[allCorners.Length - 1] - allCorners[allCorners.Length - 2]) / 2.0;
+
                 for (int i = 1; i < allCorners.Length - 1; i++)
                 {
                     gaps[i] = (allCorners[i + 1] - allCorners[i - 1]) / 2.0;
@@ -379,35 +398,43 @@ namespace LAsOsuBeatmapParser.Analysis
         private (double[], double[], double[]) GetCorners(int T, SRsNote[] noteSeq)
         {
             var cornersBase = new HashSet<double>();
+
             foreach (var note in noteSeq)
             {
                 cornersBase.Add(note.StartTime);
                 if (note.EndTime >= 0)
                     cornersBase.Add(note.EndTime);
             }
+
             var temp = cornersBase.ToList();
+
             foreach (double s in temp)
             {
                 cornersBase.Add(s + 501);
                 cornersBase.Add(s - 499);
                 cornersBase.Add(s + 1);
             }
+
             cornersBase.Add(0);
             cornersBase.Add(T);
             var baseCorners = cornersBase.Where(s => s >= 0 && s <= T).OrderBy(s => s).ToArray();
             var cornersA = new HashSet<double>();
+
             foreach (var note in noteSeq)
             {
                 cornersA.Add(note.StartTime);
                 if (note.EndTime >= 0)
                     cornersA.Add(note.EndTime);
             }
+
             temp = cornersA.ToList();
+
             foreach (double s in temp)
             {
                 cornersA.Add(s + 1000);
                 cornersA.Add(s - 1000);
             }
+
             cornersA.Add(0);
             cornersA.Add(T);
             var A_corners = cornersA.Where(s => s >= 0 && s <= T).OrderBy(s => s).ToArray();
@@ -418,6 +445,7 @@ namespace LAsOsuBeatmapParser.Analysis
         private static double[][] GetKeyUsage400Global(int k, int t, SRsNote[] noteSeq, double[] baseCorners)
         {
             var keyUsage400 = new double[k][];
+
             for (int i = 0; i < k; i++)
             {
                 keyUsage400[i] = new double[baseCorners.Length];
@@ -452,10 +480,12 @@ namespace LAsOsuBeatmapParser.Analysis
             for (int i = 0; i < baseCorners.Length; i++)
             {
                 double sum = 0;
+
                 for (int j = 0; j < k; j++)
                 {
                     sum += keyUsage400[j][i] * crossMatrix[j];
                 }
+
                 anchor[i] = sum;
             }
 
@@ -465,10 +495,12 @@ namespace LAsOsuBeatmapParser.Analysis
         private static double[] InterpValuesGlobal(double[] newX, double[] oldX, double[] oldVals)
         {
             var result = new double[newX.Length];
+
             for (int i = 0; i < newX.Length; i++)
             {
                 double x = newX[i];
                 int idx = Array.BinarySearch(oldX, x);
+
                 if (idx >= 0)
                 {
                     result[i] = oldVals[idx];
@@ -476,6 +508,7 @@ namespace LAsOsuBeatmapParser.Analysis
                 else
                 {
                     idx = ~idx;
+
                     if (idx == 0)
                     {
                         result[i] = oldVals[0];
@@ -494,8 +527,8 @@ namespace LAsOsuBeatmapParser.Analysis
                     }
                 }
             }
+
             return result;
         }
-
     }
 }

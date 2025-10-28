@@ -549,7 +549,7 @@ impl SRCalculator {
 
         // Calculate percentiles
         let mut d_with_weights: Vec<(f64, f64)> = d.iter().map(|&d_val| (d_val, 1.0)).collect();
-        d_with_weights.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+        d_with_weights.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
 
         let sorted_d: Vec<f64> = d_with_weights.iter().map(|(d, _)| *d).collect();
         let sorted_weights: Vec<f64> = d_with_weights.iter().map(|(_, w)| *w).collect();
