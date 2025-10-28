@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace LAsOsuBeatmapParser.Analysis
+namespace LAsOsuBeatmapParser.Tests.AnalysisSR
 {
     /// <summary>
     ///     SR算法专用Note类

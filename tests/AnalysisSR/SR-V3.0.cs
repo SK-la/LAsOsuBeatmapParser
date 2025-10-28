@@ -9,22 +9,6 @@ using LAsOsuBeatmapParser.Extensions;
 
 namespace LAsOsuBeatmapParser.Tests.AnalysisSR
 {
-    public class NoteComparer : IComparer<SRsNote>
-    {
-        public int Compare(SRsNote a, SRsNote b)
-        {
-            int cmp = a.StartTime.CompareTo(b.StartTime);
-            return cmp != 0 ? cmp : a.Index.CompareTo(b.Index);
-        }
-    }
-
-    public class NoteComparerByT : IComparer<SRsNote>
-    {
-        public int Compare(SRsNote a, SRsNote b)
-        {
-            return a.EndTime.CompareTo(b.EndTime);
-        }
-    }
 
     public class SRCalculatorV30
     {

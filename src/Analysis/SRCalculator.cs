@@ -87,7 +87,9 @@ namespace LAsOsuBeatmapParser.Analysis
             return (sr, timings);
         }
 
-        private sealed class NoteData
+#region 结构体
+
+        private readonly struct NoteData : IEquatable<NoteData>
         {
             public NoteData(int column, int headTime, int tailTime)
             {
@@ -104,6 +106,21 @@ namespace LAsOsuBeatmapParser.Analysis
             {
                 get => TailTime >= 0 && TailTime > HeadTime;
             }
+
+            public bool Equals(NoteData other)
+            {
+                return Column == other.Column && HeadTime == other.HeadTime && TailTime == other.TailTime;
+            }
+
+            public override bool Equals(object? obj)
+            {
+                return obj is NoteData other && Equals(other);
+            }
+
+            public override int GetHashCode()
+            {
+                return HashCode.Combine(Column, HeadTime, TailTime);
+            }
         }
 
         private readonly struct LnRepresentation
@@ -119,6 +136,8 @@ namespace LAsOsuBeatmapParser.Analysis
             public double[] Cumulative { get; }
             public double[] Values     { get; }
         }
+
+#endregion
 
         private static class PythonPortAlgorithm
         {
@@ -169,28 +188,28 @@ namespace LAsOsuBeatmapParser.Analysis
                 foreach (List<NoteData> columnNotes in notesByColumn)
                     columnNotes.Sort(NoteComparer);
 
-                var longNotes        = notes.Where(n => n.IsLongNote).ToList();
-                var longNotesByTails = longNotes.OrderBy(n => n.TailTime).ToList();
+                List<NoteData> longNotes        = notes.Where(n => n.IsLongNote).ToList();
+                List<NoteData> longNotesByTails = longNotes.OrderBy(n => n.TailTime).ToList();
 
                 // 添加调试日志
-                Console.WriteLine($"C# notes count: {notes.Count}");
-                Console.WriteLine($"C# longNotes count: {longNotes.Count}");
-                Console.WriteLine($"C# keyCount: {keyCount}");
+                //Console.WriteLine($"C# notes count: {notes.Count}");
+                //Console.WriteLine($"C# longNotes count: {longNotes.Count}");
+                //Console.WriteLine($"C# keyCount: {keyCount}");
 
                 double od = beatmap.BeatmapInfo.Difficulty.OverallDifficulty;
                 double x  = ComputeHitLeniency(od);
 
-                Console.WriteLine($"C# od: {od}, x: {x}");
+                //Console.WriteLine($"C# od: {od}, x: {x}");
 
                 int maxHead   = notes.Max(n => n.HeadTime);
                 int maxTail   = longNotes.Count > 0 ? longNotes.Max(n => n.TailTime) : maxHead;
                 int totalTime = Math.Max(maxHead, maxTail) + 1;
 
-                Console.WriteLine($"C# maxHead: {maxHead}, maxTail: {maxTail}, totalTime: {totalTime}");
+                //Console.WriteLine($"C# maxHead: {maxHead}, maxTail: {maxTail}, totalTime: {totalTime}");
 
                 (double[] allCorners, double[] baseCorners, double[] aCorners) = BuildCorners(totalTime, notes);
 
-                Console.WriteLine($"C# allCorners length: {allCorners.Length}, baseCorners length: {baseCorners.Length}");
+                //Console.WriteLine($"C# allCorners length: {allCorners.Length}, baseCorners length: {baseCorners.Length}");
 
                 bool[][] keyUsage      = BuildKeyUsage(keyCount, totalTime, notes, baseCorners);
                 int[][]  activeColumns = DeriveActiveColumns(keyUsage);
@@ -206,12 +225,12 @@ namespace LAsOsuBeatmapParser.Analysis
                 double[] xBarBase = ComputeXBar(keyCount, totalTime, x, notesByColumn, activeColumns, baseCorners);
                 double[] xBar     = InterpValues(allCorners, baseCorners, xBarBase);
 
-                Console.WriteLine($"C# xBarBase sample: {string.Join(", ", xBarBase.Take(10))}");
+                //Console.WriteLine($"C# xBarBase sample: {string.Join(", ", xBarBase.Take(10))}");
 
                 double[] pBarBase = ComputePBar(keyCount, totalTime, x, notes, lnRep, anchorBase, baseCorners);
                 double[] pBar     = InterpValues(allCorners, baseCorners, pBarBase);
 
-                Console.WriteLine($"C# pBarBase sample: {string.Join(", ", pBarBase.Take(10))}");
+                //Console.WriteLine($"C# pBarBase sample: {string.Join(", ", pBarBase.Take(10))}");
 
                 double[] aBarBase = ComputeABar(keyCount, totalTime, deltaKs, activeColumns, aCorners, baseCorners);
                 double[] aBar     = InterpValues(allCorners, aCorners, aBarBase);
@@ -261,7 +280,7 @@ namespace LAsOsuBeatmapParser.Analysis
 
                 double sr = FinaliseDifficulty(dAll, effectiveWeights, notes, longNotes);
 
-                Console.WriteLine($"C# final SR: {sr}");
+                //Console.WriteLine($"C# final SR: {sr}");
 
                 return sr;
             }
@@ -324,7 +343,7 @@ namespace LAsOsuBeatmapParser.Analysis
 
             private static bool[][] BuildKeyUsage(int keyCount, int totalTime, List<NoteData> notes, double[] baseCorners)
             {
-                var keyUsage = new bool[keyCount][];
+                bool[][] keyUsage = new bool[keyCount][];
                 for (int i = 0; i < keyCount; i++)
                     keyUsage[i] = new bool[baseCorners.Length];
 
@@ -344,8 +363,8 @@ namespace LAsOsuBeatmapParser.Analysis
 
             private static int[][] DeriveActiveColumns(bool[][] keyUsage)
             {
-                int length = keyUsage[0].Length;
-                var active = new int[length][];
+                int     length = keyUsage[0].Length;
+                int[][] active = new int[length][];
 
                 for (int i = 0; i < length; i++)
                 {
@@ -365,7 +384,7 @@ namespace LAsOsuBeatmapParser.Analysis
 
             private static double[][] BuildKeyUsage400(int keyCount, int totalTime, List<NoteData> notes, double[] baseCorners)
             {
-                var usage = new double[keyCount][];
+                double[][] usage = new double[keyCount][];
                 for (int k = 0; k < keyCount; k++)
                     usage[k] = new double[baseCorners.Length];
 
@@ -387,10 +406,7 @@ namespace LAsOsuBeatmapParser.Analysis
                     double extension       = clampedDuration / 150.0;
                     double contribution    = baseContribution + extension;
 
-                    for (int idx = left; idx < right; idx++)
-                    {
-                        usage[note.Column][idx] += contribution;
-                    }
+                    for (int idx = left; idx < right; idx++) usage[note.Column][idx] += contribution;
 
                     for (int idx = left400; idx < left; idx++)
                     {
@@ -416,7 +432,7 @@ namespace LAsOsuBeatmapParser.Analysis
 
             private static double[] ComputeAnchor(int keyCount, double[][] keyUsage400, double[] baseCorners)
             {
-                var anchor = new double[baseCorners.Length];
+                double[] anchor = new double[baseCorners.Length];
 
                 for (int i = 0; i < baseCorners.Length; i++)
                 {
@@ -503,8 +519,8 @@ namespace LAsOsuBeatmapParser.Analysis
             {
                 const double defaultDelta = 1e9;
 
-                var deltaKs = new double[keyCount][];
-                var jKs     = new double[keyCount][];
+                double[][] deltaKs = new double[keyCount][];
+                double[][] jKs     = new double[keyCount][];
 
                 for (int k = 0; k < keyCount; k++)
                 {
@@ -573,9 +589,9 @@ namespace LAsOsuBeatmapParser.Analysis
 
             private static double[] ComputeXBar(int keyCount, int totalTime, double x, List<NoteData>[] notesByColumn, int[][] activeColumns, double[] baseCorners)
             {
-                double[] cross     = CrossMatrix[keyCount];
-                var      xKs       = new double[keyCount + 1][];
-                var      fastCross = new double[keyCount + 1][];
+                double[]   cross     = CrossMatrix[keyCount];
+                double[][] xKs       = new double[keyCount + 1][];
+                double[][] fastCross = new double[keyCount + 1][];
 
                 for (int i = 0; i < xKs.Length; i++)
                 {
@@ -585,7 +601,7 @@ namespace LAsOsuBeatmapParser.Analysis
 
                 for (int k = 0; k <= keyCount; k++)
                 {
-                    List<NoteData> pair = new List<NoteData>();
+                    var pair = new List<NoteData>();
 
                     if (k == 0)
                         pair.AddRange(notesByColumn[0]);
@@ -650,7 +666,7 @@ namespace LAsOsuBeatmapParser.Analysis
 
             private static double[] ComputePBar(int keyCount, int totalTime, double x, List<NoteData> notes, LnRepresentation? lnRep, double[] anchor, double[] baseCorners)
             {
-                var pStep = new double[baseCorners.Length];
+                double[] pStep = new double[baseCorners.Length];
 
                 for (int i = 0; i < notes.Count - 1; i++)
                 {
@@ -730,7 +746,7 @@ namespace LAsOsuBeatmapParser.Analysis
 
             private static double[] ComputeABar(int keyCount, int totalTime, double[][] deltaKs, int[][] activeColumns, double[] aCorners, double[] baseCorners)
             {
-                var aStep = Enumerable.Repeat(1.0, aCorners.Length).ToArray();
+                double[] aStep = Enumerable.Repeat(1.0, aCorners.Length).ToArray();
 
                 for (int i = 0; i < aCorners.Length; i++)
                 {
@@ -775,7 +791,7 @@ namespace LAsOsuBeatmapParser.Analysis
             {
                 if (tailNotes.Count < 2) return new double[baseCorners.Length];
 
-                var iList = new double[tailNotes.Count];
+                double[] iList = new double[tailNotes.Count];
 
                 for (int idx = 0; idx < tailNotes.Count; idx++)
                 {
@@ -789,7 +805,7 @@ namespace LAsOsuBeatmapParser.Analysis
                     iList[idx] = 2 / (2 + Math.Exp(-5 * (ih - 0.75)) + Math.Exp(-5 * (it - 0.75)));
                 }
 
-                var rStep = new double[baseCorners.Length];
+                double[] rStep = new double[baseCorners.Length];
 
                 for (int idx = 0; idx < tailNotes.Count - 1; idx++)
                 {
@@ -850,7 +866,7 @@ namespace LAsOsuBeatmapParser.Analysis
                 if (corners.Length == 0)
                     return Array.Empty<double>();
 
-                var gaps = new double[corners.Length];
+                double[] gaps = new double[corners.Length];
 
                 if (corners.Length == 1)
                 {
@@ -861,17 +877,14 @@ namespace LAsOsuBeatmapParser.Analysis
                 gaps[0]  = (corners[1] - corners[0]) / 2.0;
                 gaps[^1] = (corners[^1] - corners[^2]) / 2.0;
 
-                for (int i = 1; i < corners.Length - 1; i++)
-                {
-                    gaps[i] = (corners[i + 1] - corners[i - 1]) / 2.0;
-                }
+                for (int i = 1; i < corners.Length - 1; i++) gaps[i] = (corners[i + 1] - corners[i - 1]) / 2.0;
 
                 return gaps;
             }
 
             private static double FinaliseDifficulty(List<double> difficulties, List<double> weights, List<NoteData> notes, List<NoteData> longNotes)
             {
-                var combined = difficulties.Zip(weights, (d, w) => (d, w)).OrderBy(pair => pair.d).ToList();
+                List<(double d, double w)> combined = difficulties.Zip(weights, (d, w) => (d, w)).OrderBy(pair => pair.d).ToList();
                 if (combined.Count == 0)
                     return 0;
 
@@ -906,7 +919,7 @@ namespace LAsOsuBeatmapParser.Analysis
 
                 percentile83 /= 4.0;
 
-                Console.WriteLine($"C# percentile93: {percentile93}, percentile83: {percentile83}");
+                //Console.WriteLine($"C# percentile93: {percentile93}, percentile83: {percentile83}");
 
                 double weightedMeanNumerator = 0;
                 for (int i = 0; i < sortedD.Length; i++)
@@ -914,7 +927,7 @@ namespace LAsOsuBeatmapParser.Analysis
 
                 double weightedMean = Math.Pow(Math.Max(weightedMeanNumerator / totalWeight, 0), 0.2);
 
-                Console.WriteLine($"C# weightedMean: {weightedMean}");
+                //Console.WriteLine($"C# weightedMean: {weightedMean}");
 
                 double topComponent    = 0.25 * 0.88 * percentile93;
                 double middleComponent = 0.2 * 0.94 * percentile83;
@@ -922,7 +935,7 @@ namespace LAsOsuBeatmapParser.Analysis
                 double sr              = topComponent + middleComponent + meanComponent;
                 sr = Math.Pow(sr, 1.0) / Math.Pow(8, 1.0) * 8;
 
-                Console.WriteLine($"C# sr before notes adjustment: {sr}");
+                //Console.WriteLine($"C# sr before notes adjustment: {sr}");
 
                 double totalNotes = notes.Count;
 
@@ -932,13 +945,13 @@ namespace LAsOsuBeatmapParser.Analysis
                     totalNotes += 0.5 * (len / 200.0);
                 }
 
-                Console.WriteLine($"C# totalNotes: {totalNotes}");
+                //Console.WriteLine($"C# totalNotes: {totalNotes}");
 
                 sr *= totalNotes / (totalNotes + 60);
                 sr =  RescaleHigh(sr);
                 sr *= 0.975;
 
-                Console.WriteLine($"C# final SR: {sr}");
+                //Console.WriteLine($"C# final SR: {sr}");
 
                 return sr;
             }
@@ -979,7 +992,7 @@ namespace LAsOsuBeatmapParser.Analysis
 
             private static double[] InterpValues(double[] newX, double[] oldX, double[] oldVals)
             {
-                var result = new double[newX.Length];
+                double[] result = new double[newX.Length];
 
                 for (int i = 0; i < newX.Length; i++)
                 {
@@ -1022,7 +1035,7 @@ namespace LAsOsuBeatmapParser.Analysis
 
             private static double[] StepInterp(double[] newX, double[] oldX, double[] oldVals)
             {
-                var result = new double[newX.Length];
+                double[] result = new double[newX.Length];
 
                 for (int i = 0; i < newX.Length; i++)
                 {
@@ -1047,7 +1060,7 @@ namespace LAsOsuBeatmapParser.Analysis
                     return Array.Empty<double>();
 
                 double[] cumulative = BuildCumulative(positions, values);
-                var      output     = new double[positions.Length];
+                double[] output     = new double[positions.Length];
 
                 for (int i = 0; i < positions.Length; i++)
                 {
@@ -1074,7 +1087,7 @@ namespace LAsOsuBeatmapParser.Analysis
 
             private static double[] BuildCumulative(double[] positions, double[] values)
             {
-                var cumulative = new double[positions.Length];
+                double[] cumulative = new double[positions.Length];
 
                 for (int i = 1; i < positions.Length; i++)
                 {
@@ -1119,9 +1132,7 @@ namespace LAsOsuBeatmapParser.Analysis
                 double total = 0;
 
                 if (startIndex == endIndex)
-                {
                     total = (b - a) * values[startIndex];
-                }
                 else
                 {
                     total += (points[startIndex + 1] - a) * values[startIndex];
@@ -1177,7 +1188,10 @@ namespace LAsOsuBeatmapParser.Analysis
                 return left;
             }
 
-            private static int LowerBound(double[] array, int value) => LowerBound(array, (double)value);
+            private static int LowerBound(double[] array, int value)
+            {
+                return LowerBound(array, (double)value);
+            }
 
             private static int LowerBound(int[] array, double value)
             {
@@ -1270,9 +1284,15 @@ namespace LAsOsuBeatmapParser.Analysis
                 return sr <= 9 ? sr : softened;
             }
 
-            private static int Clamp(int value, int min, int max) => Math.Min(Math.Max(value, min), max);
+            private static int Clamp(int value, int min, int max)
+            {
+                return Math.Min(Math.Max(value, min), max);
+            }
 
-            private static bool NearlyEquals(double a, double b, double epsilon = 1e-9) => Math.Abs(a - b) <= epsilon;
+            private static bool NearlyEquals(double a, double b, double epsilon = 1e-9)
+            {
+                return Math.Abs(a - b) <= epsilon;
+            }
 
             private static int CompareNotes(NoteData a, NoteData b)
             {
