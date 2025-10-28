@@ -147,7 +147,7 @@ impl SRCalculator {
         let mut anchor = vec![0.0; base_corners.len()];
         for i in 0..base_corners.len() {
             let mut counts: Vec<f64> = (0..k as usize).map(|col| key_usage_400[col][i]).collect();
-            counts.sort_by(|a, b| b.partial_cmp(a).expect("partial_cmp failed"));
+            counts.sort_by(|a, b| b.partial_cmp(a).unwrap());
             let nonzero: Vec<f64> = counts.into_iter().filter(|&x| x != 0.0).collect();
             if nonzero.len() > 1 {
                 let mut walk = 0.0;
@@ -263,11 +263,11 @@ impl SRCalculator {
 
         for col in 0..(k + 1) as usize {
             let mut notes_in_pair = vec![];
-            if (col == 0) {
+            if col == 0 {
                 if !note_seq_by_column.is_empty() {
                     notes_in_pair = note_seq_by_column[0].clone();
                 }
-            } else if (col == k as usize) {
+            } else if col == k as usize {
                 if !note_seq_by_column.is_empty() {
                     notes_in_pair = note_seq_by_column[k as usize - 1].clone();
                 }
@@ -451,7 +451,7 @@ impl SRCalculator {
     fn compute_c_and_ks(k: i32, t: i32, note_seq: &[(i32, i32, i32)], key_usage: &[Vec<bool>]) -> (Vec<f64>, Vec<f64>) {
         // C(s): count of notes within 500 ms
         let mut note_hit_times: Vec<f64> = note_seq.iter().map(|&(_, h, _)| h as f64 / 1000.0).collect();
-        note_hit_times.sort_by(|a, b| a.partial_cmp(b).expect("partial_cmp failed"));
+        note_hit_times.sort_by(|a, b| a.partial_cmp(b).unwrap());
 
         let mut c_step = vec![0.0; t as usize];
         for i in 0..t as usize {
@@ -549,7 +549,7 @@ impl SRCalculator {
 
         // Calculate percentiles
         let mut d_with_weights: Vec<(f64, f64)> = d.iter().map(|&d_val| (d_val, 1.0)).collect();
-        d_with_weights.sort_by(|a, b| a.0.partial_cmp(&b.0).expect("partial_cmp failed"));
+        d_with_weights.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
 
         let sorted_d: Vec<f64> = d_with_weights.iter().map(|(d, _)| *d).collect();
         let sorted_weights: Vec<f64> = d_with_weights.iter().map(|(_, w)| *w).collect();

@@ -13,7 +13,7 @@ using Xunit.Abstractions;
 namespace LAsOsuBeatmapParser.Tests
 {
     [Collection("Sequential")]
-    public class RustSRCalculatorTests
+    public class VS_SR_Tests
     {
         // 测试文件路径定义
         private static readonly string TestResourceDir = Path.Combine(
@@ -26,16 +26,16 @@ namespace LAsOsuBeatmapParser.Tests
             "Glen Check - 60's Cardin (SK_la) [Insane].osu"
         );
 
-        private static readonly string[] TestFiles = Directory.GetFiles(TestResourceDir, "*.osu");
-        private readonly ITestOutputHelper _output;
+        private static readonly string[]          TestFiles = Directory.GetFiles(TestResourceDir, "*.osu");
+        private readonly        ITestOutputHelper _output;
 
-        public RustSRCalculatorTests(ITestOutputHelper output)
+        public VS_SR_Tests(ITestOutputHelper output)
         {
             _output = output;
         }
 
         [Fact]
-        public void Test_Performance_MultipleFiles()
+        public void Test_3Version_MultipleFiles()
         {
             // Arrange
             Assert.NotEmpty(TestFiles);
@@ -48,11 +48,11 @@ namespace LAsOsuBeatmapParser.Tests
             foreach (string filePath in TestFiles)
             {
                 Beatmap beatmap = decoder.Decode(filePath);
-                double cs = beatmap.BeatmapInfo.Difficulty.CircleSize;
+                double  cs      = beatmap.BeatmapInfo.Difficulty.CircleSize;
 
                 // Rust
-                var stopwatch = Stopwatch.StartNew();
-                double? rustSr = SRCalculatorRust.CalculateSR_FromFile(filePath);
+                var     stopwatch = Stopwatch.StartNew();
+                double? rustSr    = SRCalculatorRust.CalculateSR_FromFile(filePath);
                 stopwatch.Stop();
                 long rustTime = stopwatch.ElapsedMilliseconds;
 
@@ -77,15 +77,11 @@ namespace LAsOsuBeatmapParser.Tests
             _output.WriteLine("---|---------|-------|-------|-----------|---------|---------");
 
             foreach ((double cs, double? rustSr, long rustTime, double? csSr, long csTime, double? pySr, long pyTime) in results)
-            {
                 _output.WriteLine($"{cs,-3:F1} | {rustSr:F4} | {csSr:F4} | {pySr:F4} | {rustTime,9} | {csTime,7} | {pyTime,7}");
 
-                Console.WriteLine($"{cs,-3:F1} | {rustSr:F4} | {csSr:F4} | {pySr:F4} | {rustTime,9} | {csTime,7} | {pyTime,7}");
-            }
-
             double avgRustTime = results.Average(r => r.RustTime);
-            double avgCsTime = results.Average(r => r.CsTime);
-            double avgPyTime = results.Average(r => r.PyTime);
+            double avgCsTime   = results.Average(r => r.CsTime);
+            double avgPyTime   = results.Average(r => r.PyTime);
 
             _output.WriteLine($"Average Rust Time: {avgRustTime:F2}ms");
             _output.WriteLine($"Average C# Time: {avgCsTime:F2}ms");
@@ -96,14 +92,10 @@ namespace LAsOsuBeatmapParser.Tests
             foreach ((double cs, double? rustSr, long rustTime, double? csSr, long csTime, double? pySr, long pyTime) in results)
             {
                 if (rustSr.HasValue && pySr.HasValue && !double.IsNaN(rustSr.Value) && !double.IsNaN(pySr.Value))
-                {
                     Assert.True(Math.Abs(rustSr.Value - pySr.Value) < 0.0001, $"Rust SR {rustSr.Value} vs Python {pySr.Value}");
-                }
 
                 if (csSr.HasValue && pySr.HasValue && !double.IsNaN(csSr.Value) && !double.IsNaN(pySr.Value))
-                {
                     Assert.True(Math.Abs(csSr.Value - pySr.Value) < 0.0001, $"C# SR {csSr.Value} vs Python {pySr.Value}");
-                }
             }
         }
     }

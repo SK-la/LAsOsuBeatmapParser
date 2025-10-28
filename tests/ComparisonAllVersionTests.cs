@@ -19,7 +19,7 @@ namespace LAsOsuBeatmapParser.Tests
     ///     C#+Rust所有SR算法对比测试
     ///     测试单一文件计算一次，多个文件计算一次
     /// </summary>
-    public class ComparisonTests
+    public class ComparisonAllVersionTests
     {
         // SR显示精度控制常量
         private const int SR_DECIMAL_PLACES = 4;
@@ -35,10 +35,10 @@ namespace LAsOsuBeatmapParser.Tests
             "Glen Check - 60's Cardin (SK_la) [Insane].osu"
         );
 
-        private static readonly string[] MultipleTestFiles = Directory.GetFiles(TestResourceDir, "*.osu");
-        private readonly ITestOutputHelper _output;
+        private static readonly string[]          MultipleTestFiles = Directory.GetFiles(TestResourceDir, "*.osu");
+        private readonly        ITestOutputHelper _output;
 
-        public ComparisonTests(ITestOutputHelper output)
+        public ComparisonAllVersionTests(ITestOutputHelper output)
         {
             _output = output;
         }
@@ -48,7 +48,7 @@ namespace LAsOsuBeatmapParser.Tests
         {
             // Arrange
             Assert.True(File.Exists(SingleTestFile), $"Test file not found: {SingleTestFile}");
-            var decoder = new LegacyBeatmapDecoder();
+            var     decoder = new LegacyBeatmapDecoder();
             Beatmap beatmap = decoder.Decode(SingleTestFile);
 
             _output.WriteLine("=== C#+Rust SR算法对比 - 单一文件测试 ===");
@@ -96,12 +96,12 @@ namespace LAsOsuBeatmapParser.Tests
                 // _output.WriteLine($"Running algorithm: {name}");
                 long initialMemory = GC.GetAllocatedBytesForCurrentThread();
 
-                var stopwatch = Stopwatch.StartNew();
-                double sr = calculator(beatmap);
+                var    stopwatch = Stopwatch.StartNew();
+                double sr        = calculator(beatmap);
                 stopwatch.Stop();
 
                 long finalMemory = GC.GetAllocatedBytesForCurrentThread();
-                long memoryUsed = finalMemory - initialMemory;
+                long memoryUsed  = finalMemory - initialMemory;
 
                 results.Add((name, sr, stopwatch.ElapsedMilliseconds, memoryUsed));
 
@@ -137,6 +137,7 @@ namespace LAsOsuBeatmapParser.Tests
                 foreach ((string algorithm, double sr, long _, long _) in fromFileResults)
                 {
                     double diff = Math.Abs(sr - referenceSR);
+                    // 精度不允许超过0.001，不允许修改
                     Assert.True(diff < 0.001, $"FromFile算法 {algorithm} 与 {fromFileResults.First().algorithm} 结果不一致: {sr:F6} vs {referenceSR:F6}, 差异: {diff:F6}");
                 }
             }
@@ -165,12 +166,12 @@ namespace LAsOsuBeatmapParser.Tests
             // 定义所有算法
             var algorithms = new (string name, Func<Beatmap, string, double> calculator)[]
             {
-                ("C# Current", (bm, fp) => SRCalculator.Instance.CalculateSR(bm, out _)),
-                ("C# V3.0", (bm, fp) => SRCalculatorV30.Instance.CalculateSR(bm, out _)),
-                ("C# V2.3", (bm, fp) => CalculateWithV23(bm)),
-                ("C# FromFile", (bm, fp) => CalculateSRFromFile(fp)),
-                ("C# FromContent", (bm, fp) => CalculateSRFromContent(File.ReadAllText(fp))),
-                ("Rust FromFile", (bm, fp) => SRCalculatorRust.CalculateSR_FromFile(fp) ?? -1),
+                ("C# Current", (bm,      fp) => SRCalculator.Instance.CalculateSR(bm, out _)),
+                ("C# V3.0", (bm,         fp) => SRCalculatorV30.Instance.CalculateSR(bm, out _)),
+                ("C# V2.3", (bm,         fp) => CalculateWithV23(bm)),
+                ("C# FromFile", (bm,     fp) => CalculateSRFromFile(fp)),
+                ("C# FromContent", (bm,  fp) => CalculateSRFromContent(File.ReadAllText(fp))),
+                ("Rust FromFile", (bm,   fp) => SRCalculatorRust.CalculateSR_FromFile(fp) ?? -1),
                 ("Python FromFile", (bm, fp) => SRCalculatorPython.CalculateSR_FromFile(fp) ?? -1)
             };
 
@@ -183,12 +184,12 @@ namespace LAsOsuBeatmapParser.Tests
                 {
                     long initialMemory = GC.GetAllocatedBytesForCurrentThread();
 
-                    var stopwatch = Stopwatch.StartNew();
-                    double sr = calculator(beatmap, filePath);
+                    var    stopwatch = Stopwatch.StartNew();
+                    double sr        = calculator(beatmap, filePath);
                     stopwatch.Stop();
 
                     long finalMemory = GC.GetAllocatedBytesForCurrentThread();
-                    long memoryUsed = finalMemory - initialMemory;
+                    long memoryUsed  = finalMemory - initialMemory;
 
                     results.Add((beatmap.BeatmapInfo.Difficulty.CircleSize, algorithmName, sr, stopwatch.ElapsedMilliseconds, memoryUsed));
 
@@ -208,9 +209,9 @@ namespace LAsOsuBeatmapParser.Tests
 
             foreach (IGrouping<string, (double cs, string algorithm, double sr, long timeMs, long memoryBytes)> group in algorithmGroups)
             {
-                double avgSR = group.Average(r => r.sr);
-                double avgTime = group.Average(r => r.timeMs);
-                double avgMemory = group.Average(r => r.memoryBytes);
+                double avgSR       = group.Average(r => r.sr);
+                double avgTime     = group.Average(r => r.timeMs);
+                double avgMemory   = group.Average(r => r.memoryBytes);
                 double avgMemoryMB = avgMemory / (1024.0 * 1024.0);
 
                 table.AppendLine($"| {group.Key,-10} | {avgSR,6:F4} | {avgTime,12:F2} | {avgMemoryMB,12:F2} |");
@@ -228,7 +229,7 @@ namespace LAsOsuBeatmapParser.Tests
 
             _output.WriteLine("✅ 多个文件对比测试完成");
         }
-
+        
         // 辅助方法：从文件计算SR
         private double CalculateSRFromFile(string filePath)
         {
@@ -244,14 +245,14 @@ namespace LAsOsuBeatmapParser.Tests
         // 辅助方法：使用V2.3版本计算
         private double CalculateWithV23(Beatmap beatmap)
         {
-            var calculator = new SRCalculatorV23();
-            var noteSequence = new List<SRsNote>();
-            int keyCount = (int)beatmap.BeatmapInfo.Difficulty.CircleSize;
-            double od = beatmap.BeatmapInfo.Difficulty.OverallDifficulty;
+            var    calculator   = new SRCalculatorV23();
+            var    noteSequence = new List<SRsNote>();
+            int    keyCount     = (int)beatmap.BeatmapInfo.Difficulty.CircleSize;
+            double od           = beatmap.BeatmapInfo.Difficulty.OverallDifficulty;
 
             foreach (HitObject hitObject in beatmap.HitObjects)
             {
-                int col = hitObject is ManiaHitObject maniaHit ? maniaHit.Column : ManiaExtensions.GetColumnFromX(keyCount, hitObject.Position.X);
+                int col  = hitObject is ManiaHitObject maniaHit ? maniaHit.Column : ManiaExtensions.GetColumnFromX(keyCount, hitObject.Position.X);
                 int time = (int)hitObject.StartTime;
                 int tail = hitObject.EndTime > hitObject.StartTime ? (int)hitObject.EndTime : -1;
                 noteSequence.Add(new SRsNote(col, time, tail));

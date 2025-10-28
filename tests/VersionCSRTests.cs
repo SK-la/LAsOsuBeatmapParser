@@ -50,13 +50,13 @@ namespace LAsOsuBeatmapParser.Tests
         {
             // Arrange
             Assert.True(File.Exists(SingleTestFile), $"Test file not found: {SingleTestFile}");
-            var decoder = new LegacyBeatmapDecoder();
+            var     decoder = new LegacyBeatmapDecoder();
             Beatmap beatmap = decoder.Decode(SingleTestFile);
 
             _output.WriteLine("=== 不同版本C# SR算法 - 单一文件测试 ===");
-            _output.WriteLine($"CS值: {beatmap.BeatmapInfo.Difficulty.CircleSize}");
-            _output.WriteLine($"谱面信息: {beatmap.BeatmapInfo.Metadata.Artist} - {beatmap.BeatmapInfo.Metadata.Title} [{beatmap.BeatmapInfo.Metadata.Version}]");
-            _output.WriteLine($"键数: {(int)beatmap.BeatmapInfo.Difficulty.CircleSize}k");
+            _output.WriteLine(
+                $"键数: {(int)beatmap.BeatmapInfo.Difficulty.CircleSize}k, "
+              + $"谱面信息: {beatmap.BeatmapInfo.Metadata.Artist} - {beatmap.BeatmapInfo.Metadata.Title} [{beatmap.BeatmapInfo.Metadata.Version}]");
             _output.WriteLine("");
 
             // 预热JIT
@@ -79,12 +79,12 @@ namespace LAsOsuBeatmapParser.Tests
             {
                 long initialMemory = GC.GetAllocatedBytesForCurrentThread();
 
-                var stopwatch = Stopwatch.StartNew();
-                double sr = calculator(beatmap);
+                var    stopwatch = Stopwatch.StartNew();
+                double sr        = calculator(beatmap);
                 stopwatch.Stop();
 
                 long finalMemory = GC.GetAllocatedBytesForCurrentThread();
-                long memoryUsed = finalMemory - initialMemory;
+                long memoryUsed  = finalMemory - initialMemory;
 
                 results.Add((name, sr, stopwatch.ElapsedMilliseconds, memoryUsed));
 
@@ -144,19 +144,19 @@ namespace LAsOsuBeatmapParser.Tests
             // Act - 每个文件每个版本计算一次
             foreach (string filePath in MultipleTestFiles)
             {
-                Beatmap beatmap = decoder.Decode(filePath);
-                string fileName = Path.GetFileName(filePath);
+                Beatmap beatmap  = decoder.Decode(filePath);
+                string  fileName = Path.GetFileName(filePath);
 
                 foreach ((string versionName, Func<Beatmap, double> calculator) in calculators)
                 {
                     long initialMemory = GC.GetAllocatedBytesForCurrentThread();
 
-                    var stopwatch = Stopwatch.StartNew();
-                    double sr = calculator(beatmap);
+                    var    stopwatch = Stopwatch.StartNew();
+                    double sr        = calculator(beatmap);
                     stopwatch.Stop();
 
                     long finalMemory = GC.GetAllocatedBytesForCurrentThread();
-                    long memoryUsed = finalMemory - initialMemory;
+                    long memoryUsed  = finalMemory - initialMemory;
 
                     results.Add((beatmap.BeatmapInfo.Difficulty.CircleSize, versionName, sr, stopwatch.ElapsedMilliseconds, memoryUsed));
 
@@ -175,7 +175,7 @@ namespace LAsOsuBeatmapParser.Tests
             // 输出表格对比
             _output.WriteLine("=== SR值表格对比 ===");
             IOrderedEnumerable<IGrouping<double, (double cs, string version, double sr, long timeMs, long memoryBytes)>> fileGroups = results.GroupBy(r => r.cs).OrderBy(g => g.Key);
-            string[] versions = calculators.Select(c => c.name).ToArray();
+            string[]                                                                                                     versions   = calculators.Select(c => c.name).ToArray();
 
             // 构建表格
             var table = new StringBuilder();
@@ -192,7 +192,7 @@ namespace LAsOsuBeatmapParser.Tests
                 foreach (string version in versions)
                 {
                     (double cs, string version, double sr, long timeMs, long memoryBytes) result = fileGroup.FirstOrDefault(r => r.version == version);
-                    string srStr = result != default ? $"{result.sr:F4}" : "N/A";
+                    string                                                                srStr  = result != default ? $"{result.sr:F4}" : "N/A";
                     table.Append($"| {srStr} ");
                 }
 
@@ -200,37 +200,20 @@ namespace LAsOsuBeatmapParser.Tests
             }
 
             _output.WriteLine(table.ToString());
-
-            // 计算统计信息
-            IEnumerable<IGrouping<string, (double cs, string version, double sr, long timeMs, long memoryBytes)>> versionGroups = results.GroupBy(r => r.version);
-
-            foreach (IGrouping<string, (double cs, string version, double sr, long timeMs, long memoryBytes)> group in versionGroups)
-            {
-                double avgSR = group.Average(r => r.sr);
-                double avgTime = group.Average(r => r.timeMs);
-                double avgMemory = group.Average(r => r.memoryBytes);
-
-                _output.WriteLine($"{group.Key} 统计:");
-                _output.WriteLine($"  平均SR: {avgSR:F4}");
-                _output.WriteLine($"  平均时间: {avgTime:F2}ms");
-                _output.WriteLine($"  平均内存使用: {avgMemory:F0} bytes ({avgMemory / (1024.0 * 1024.0):F2} MB)");
-                _output.WriteLine("");
-            }
-
             _output.WriteLine("✅ 多个文件不同版本测试完成");
         }
 
         // 辅助方法：使用V2.3版本计算
         private double CalculateWithV23(Beatmap beatmap)
         {
-            var calculator = new SRCalculatorV23();
-            var noteSequence = new List<SRsNote>();
-            int keyCount = (int)beatmap.BeatmapInfo.Difficulty.CircleSize;
-            double od = beatmap.BeatmapInfo.Difficulty.OverallDifficulty;
+            var    calculator   = new SRCalculatorV23();
+            var    noteSequence = new List<SRsNote>();
+            int    keyCount     = (int)beatmap.BeatmapInfo.Difficulty.CircleSize;
+            double od           = beatmap.BeatmapInfo.Difficulty.OverallDifficulty;
 
             foreach (HitObject hitObject in beatmap.HitObjects)
             {
-                int col = hitObject is ManiaHitObject maniaHit ? maniaHit.Column : ManiaExtensions.GetColumnFromX(keyCount, hitObject.Position.X);
+                int col  = hitObject is ManiaHitObject maniaHit ? maniaHit.Column : ManiaExtensions.GetColumnFromX(keyCount, hitObject.Position.X);
                 int time = (int)hitObject.StartTime;
                 int tail = hitObject.EndTime > hitObject.StartTime ? (int)hitObject.EndTime : -1;
                 noteSequence.Add(new SRsNote(col, time, tail));

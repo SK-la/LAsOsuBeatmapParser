@@ -5,37 +5,44 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Text.RegularExpressions;
-using LAsOsuBeatmapParser.Beatmaps;
 
 namespace LAsOsuBeatmapParser.Analysis
 {
     public static class SRCalculatorPython
     {
-        // Python脚本路径 - 相对于项目根目录
-        private static readonly string PythonScriptPath = Path.Combine(
-            AppDomain.CurrentDomain.BaseDirectory,
-            "..", "..", "..", "..", "..", "Star-Rating-Rebirth", "srcalc-script.py"
-        );
+        // Python可执行文件路径 - 使用系统PATH中的python
+        private static readonly string PythonExecutable = "python";
 
-        // Python可执行文件路径 - 使用系统PATH中的python，注意修改为自己的
-        private static readonly string PythonExecutable = "py";
+        // Python脚本路径 - 基于项目根目录
+        private static string PythonScriptPath
+        {
+            get => Path.Combine(GetProjectRoot(), "Star-Rating-Rebirth", "srcalc-script.py");
+        }
+
+        // 获取项目根目录（假设以解决方案文件为锚点）
+        private static string GetProjectRoot()
+        {
+            // 递归向上查找 .sln 文件
+            var dir                                                                                        = new DirectoryInfo(AppDomain.CurrentDomain.BaseDirectory);
+            while (dir != null && !File.Exists(Path.Combine(dir.FullName, "LAsOsuBeatmapParser.sln"))) dir = dir.Parent;
+
+            if (dir == null)
+                throw new Exception("未能定位到项目根目录（缺少 LAsOsuBeatmapParser.sln）");
+
+            return dir.FullName;
+        }
 
         public static double? CalculateSR_FromFile(string filePath)
         {
             Console.WriteLine("Starting Python SR calculation");
 
             if (string.IsNullOrEmpty(filePath) || !File.Exists(filePath))
-            {
                 throw new Exception($"File not found: {filePath}");
-            }
 
             try
             {
                 // 检查Python脚本是否存在
-                if (!File.Exists(PythonScriptPath))
-                {
-                    throw new Exception($"Python脚本不存在: {PythonScriptPath}");
-                }
+                if (!File.Exists(PythonScriptPath)) throw new Exception($"Python脚本不存在: {PythonScriptPath}");
 
                 Console.WriteLine($"Python script exists: {PythonScriptPath}");
 
@@ -46,24 +53,24 @@ namespace LAsOsuBeatmapParser.Analysis
                 try
                 {
                     // 将.osu文件复制到临时目录
-                    string fileName = Path.GetFileName(filePath);
+                    string fileName     = Path.GetFileName(filePath);
                     string tempFilePath = Path.Combine(tempDir, fileName);
                     File.Copy(filePath, tempFilePath);
 
                     // 创建进程启动信息
                     var startInfo = new ProcessStartInfo
                     {
-                        FileName = PythonExecutable,
-                        Arguments = $"\"{PythonScriptPath}\" \"{tempDir}\" --single-run",
-                        UseShellExecute = false,
+                        FileName               = PythonExecutable,
+                        Arguments              = $"\"{PythonScriptPath}\" \"{tempDir}\" --single-run",
+                        UseShellExecute        = false,
                         RedirectStandardOutput = true,
-                        RedirectStandardError = true,
-                        CreateNoWindow = true,
-                        WorkingDirectory = Path.GetDirectoryName(PythonScriptPath) ?? ""
+                        RedirectStandardError  = true,
+                        CreateNoWindow         = true,
+                        WorkingDirectory       = Path.GetDirectoryName(PythonScriptPath) ?? ""
                     };
 
                     // 启动Python进程
-                    using var process = Process.Start(startInfo);
+                    using Process? process = Process.Start(startInfo);
 
                     if (process == null)
                     {
@@ -73,7 +80,7 @@ namespace LAsOsuBeatmapParser.Analysis
 
                     // 读取输出
                     string output = process.StandardOutput.ReadToEnd();
-                    string error = process.StandardError.ReadToEnd();
+                    string error  = process.StandardError.ReadToEnd();
 
                     // 等待进程完成或超时
                     bool exited = process.WaitForExit(10000); // 10秒超时
@@ -94,16 +101,10 @@ namespace LAsOsuBeatmapParser.Analysis
                         return null;
                     }
 
-                    Console.WriteLine($"Python Stdout: {output}");
-                    Console.WriteLine($"Python Stderr: {error}");
-
                     // 解析输出中的SR值
-                    var match = Regex.Match(output, @"\([A-Z]+\)\s+.*?\s+\|\s+([0-9]+\.?[0-9]*)");
+                    Match match = Regex.Match(output, @"\([A-Z]+\)\s+.*?\s+\|\s+([0-9]+\.?[0-9]*)");
 
-                    if (match.Success && double.TryParse(match.Groups[1].Value, out double sr))
-                    {
-                        return sr;
-                    }
+                    if (match.Success && double.TryParse(match.Groups[1].Value, out double sr)) return sr;
 
                     Console.WriteLine($"无法解析SR值，输出: {output}");
                     throw new Exception($"无法解析SR值，输出: {output}");

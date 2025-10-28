@@ -17,7 +17,7 @@ namespace LAsOsuBeatmapParser.Tests
     ///     生产环境C# SR算法测试
     ///     测试单一文件循环3次，多个文件计算
     /// </summary>
-    public class ProductionCSRTests
+    public class MainCsSRTests
     {
         // SR显示精度控制常量
         private const int SR_DECIMAL_PLACES = 4;
@@ -38,7 +38,7 @@ namespace LAsOsuBeatmapParser.Tests
                                                                       .ToArray();
         private readonly ITestOutputHelper _output;
 
-        public ProductionCSRTests(ITestOutputHelper output)
+        public MainCsSRTests(ITestOutputHelper output)
         {
             _output = output;
         }
