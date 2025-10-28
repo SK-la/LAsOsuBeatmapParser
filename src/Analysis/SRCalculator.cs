@@ -542,7 +542,7 @@ namespace LAsOsuBeatmapParser.Analysis
                         for (int idx = left; idx < right; idx++)
                         {
                             deltaKs[k][idx] = Math.Min(deltaKs[k][idx], delta);
-                            jKs[k][idx]     = Math.Max(jKs[k][idx], value);
+                            jKs[k][idx]     = value;
                         }
                     }
 
@@ -614,21 +614,15 @@ namespace LAsOsuBeatmapParser.Analysis
                         int idxStart = Math.Min(left, baseCorners.Length - 1);
                         int idxEnd   = Math.Min(Math.Max(right, 0), baseCorners.Length - 1);
 
-                        bool prevActive    = Contains(activeColumns[idxStart], k - 1);
-                        bool currentActive = Contains(activeColumns[idxEnd], k);
-                        if (!prevActive && !currentActive)
+                        bool condition1 = !Contains(activeColumns[idxStart], k - 1) && !Contains(activeColumns[idxEnd], k - 1);
+                        bool condition2 = !Contains(activeColumns[idxStart], k) && !Contains(activeColumns[idxEnd], k);
+                        if (condition1 || condition2)
                             val *= 1 - cross[Math.Min(k, cross.Length - 1)];
 
                         for (int idx = left; idx < right; idx++)
                         {
-                            xKs[k][idx] = Math.Max(xKs[k][idx], val);
-                            double limiter             = Math.Max(Math.Max(delta, 0.06), 0.75 * x);
-                            double limiterPower        = Math.Pow(limiter, -2);
-                            double limiterScaled       = 0.4 * limiterPower;
-                            double limiterContribution = limiterScaled - 80;
-                            double limiterClamped      = Math.Max(limiterContribution, 0);
-                            double updated             = Math.Max(fastCross[k][idx], limiterClamped);
-                            fastCross[k][idx] = updated;
+                            xKs[k][idx]       = val;
+                            fastCross[k][idx] = Math.Max(0, 0.4 * Math.Pow(Math.Max(Math.Max(delta, 0.06), 0.75 * x), -2) - 80);
                         }
                     }
                 }
@@ -676,8 +670,9 @@ namespace LAsOsuBeatmapParser.Analysis
 
                         double spikeMagnitude = Math.Pow(spikeBase, 0.25);
                         double spike          = 1000 * spikeMagnitude;
-                        int    idx            = LowerBound(baseCorners, leftNote.HeadTime);
-                        if (idx < baseCorners.Length)
+                        int    leftIdx        = LowerBound(baseCorners, leftNote.HeadTime);
+                        int    rightIdx       = UpperBound(baseCorners, leftNote.HeadTime);
+                        for (int idx = leftIdx; idx < rightIdx; idx++)
                             pStep[idx] += spike;
 
                         continue;

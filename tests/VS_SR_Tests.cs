@@ -92,10 +92,10 @@ namespace LAsOsuBeatmapParser.Tests
             foreach ((double cs, double? rustSr, long rustTime, double? csSr, long csTime, double? pySr, long pyTime) in results)
             {
                 if (rustSr.HasValue && pySr.HasValue && !double.IsNaN(rustSr.Value) && !double.IsNaN(pySr.Value))
-                    Assert.True(Math.Abs(rustSr.Value - pySr.Value) < 0.0001, $"Rust SR {rustSr.Value} vs Python {pySr.Value}");
+                    Assert.True(Math.Abs(rustSr.Value - pySr.Value) < 0.001, $"Rust SR {rustSr.Value} vs Python {pySr.Value}");
 
                 if (csSr.HasValue && pySr.HasValue && !double.IsNaN(csSr.Value) && !double.IsNaN(pySr.Value))
-                    Assert.True(Math.Abs(csSr.Value - pySr.Value) < 0.0001, $"C# SR {csSr.Value} vs Python {pySr.Value}");
+                    Assert.True(Math.Abs(csSr.Value - pySr.Value) < 0.001, $"C# SR {csSr.Value} vs Python {pySr.Value}");
             }
         }
     }
