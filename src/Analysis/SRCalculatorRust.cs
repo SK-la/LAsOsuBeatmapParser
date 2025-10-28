@@ -34,14 +34,17 @@ namespace LAsOsuBeatmapParser.Analysis
 
                 // Check for error (negative values indicate errors)
                 if (result < 0.0)
+                {
+                    Console.WriteLine($"Rust SR calculation returned negative value: {result}");
                     return null;
+                }
 
                 return result;
             }
-            catch (Exception)
+            catch (Exception ex)
             {
                 // Return null on any error (including Rust panics)
-                return null;
+                throw new Exception($"Error calling Rust DLL: {ex.Message}");
             }
         }
     }

@@ -16,7 +16,10 @@ namespace LAsOsuBeatmapParser.Tests
     public class RustSRCalculatorTests
     {
         // 测试文件路径定义
-        private static readonly string TestResourceDir = @"E:\BASE CODE\GitHub\LAsOsuBeatmapParser\tests\Resource";
+        private static readonly string TestResourceDir = Path.Combine(
+            AppDomain.CurrentDomain.BaseDirectory,
+            "..", "..", "..", "Resource"
+        );
 
         private static readonly string SingleTestFile = Path.Combine(
             TestResourceDir,
@@ -96,7 +99,7 @@ namespace LAsOsuBeatmapParser.Tests
     [MemoryDiagnoser]
     public class RustSRCalculatorBenchmarks
     {
-        private string                        _testFilePath;
+        private string?                       _testFilePath;
 
         [GlobalSetup]
         public void Setup()
