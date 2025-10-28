@@ -162,10 +162,11 @@ namespace LAsOsuBeatmapParser.Analysis
                 if (keyCount >= CrossMatrix.Length)
                     throw new NotSupportedException($"Key mode {keyCount}k is not supported by the SR algorithm.");
 
-                var notes         = new List<NoteData>();
+                int estimatedNotes = beatmap.HitObjects.Count;
+                var notes         = new List<NoteData>(estimatedNotes);
                 var notesByColumn = new List<NoteData>[keyCount];
                 for (int i = 0; i < keyCount; i++)
-                    notesByColumn[i] = new List<NoteData>();
+                    notesByColumn[i] = new List<NoteData>(estimatedNotes / keyCount + 1);
 
                 foreach (T hitObject in beatmap.HitObjects)
                 {
@@ -249,34 +250,41 @@ namespace LAsOsuBeatmapParser.Analysis
 
                 double[] dAll = new double[allCorners.Length];
 
-                for (int i = 0; i < allCorners.Length; i++)
+                // Original sequential loop
+                // for (int i = 0; i < allCorners.Length; i++)
+                // {
+                //     ...
+                // }
+
+                // Parallel version for better performance
+                Parallel.For(0, allCorners.Length, i =>
                 {
                     double abarExponent             = 3.0 / Math.Max(ksArr[i], 1e-6);
-                    double abarPow                  = SafePow(aBar[i], abarExponent);
+                    double abarPow                  = aBar[i] <= 0 ? 0 : Math.Pow(aBar[i], abarExponent);
                     double minCandidateContribution = 0.85 * jBar[i];
                     double minCandidate             = 8 + minCandidateContribution;
                     double minJ                     = Math.Min(jBar[i], minCandidate);
                     double jackComponent            = abarPow * minJ;
-                    double term1                    = 0.4 * SafePow(jackComponent, 1.5);
+                    double term1                    = 0.4 * (jackComponent <= 0 ? 0 : Math.Pow(jackComponent, 1.5));
 
                     double scaledP     = 0.8 * pBar[i];
                     double jackPenalty = rBar[i] * 35.0;
                     double ratio       = jackPenalty / (cArr[i] + 8);
                     double pComponent  = scaledP + ratio;
-                    double powerBase   = SafePow(aBar[i], 2.0 / 3.0) * pComponent;
-                    double term2       = 0.6 * SafePow(powerBase, 1.5);
+                    double powerBase   = (aBar[i] <= 0 ? 0 : Math.Pow(aBar[i], 2.0 / 3.0)) * pComponent;
+                    double term2       = 0.6 * (powerBase <= 0 ? 0 : Math.Pow(powerBase, 1.5));
 
                     double sumTerms        = term1 + term2;
-                    double s               = SafePow(sumTerms, 2.0 / 3.0);
+                    double s               = sumTerms <= 0 ? 0 : Math.Pow(sumTerms, 2.0 / 3.0);
                     double numerator       = abarPow * xBar[i];
                     double denominator     = xBar[i] + s + 1;
                     double tValue          = denominator <= 0 ? 0 : numerator / denominator;
                     double sqrtComponent   = Math.Sqrt(Math.Max(s, 0));
-                    double primaryImpact   = 2.7 * sqrtComponent * SafePow(tValue, 1.5);
+                    double primaryImpact   = 2.7 * sqrtComponent * (tValue <= 0 ? 0 : Math.Pow(tValue, 1.5));
                     double secondaryImpact = s * 0.27;
 
                     dAll[i] = primaryImpact + secondaryImpact;
-                }
+                });
 
                 double sr = FinaliseDifficulty(dAll, effectiveWeights, notes, longNotes);
 
@@ -522,7 +530,7 @@ namespace LAsOsuBeatmapParser.Analysis
                 double[][] deltaKs = new double[keyCount][];
                 double[][] jKs     = new double[keyCount][];
 
-                for (int k = 0; k < keyCount; k++)
+                Parallel.For(0, keyCount, k =>
                 {
                     deltaKs[k] = Enumerable.Repeat(defaultDelta, baseCorners.Length).ToArray();
                     jKs[k]     = new double[baseCorners.Length];
@@ -563,7 +571,8 @@ namespace LAsOsuBeatmapParser.Analysis
                     }
 
                     jKs[k] = SmoothOnCorners(baseCorners, jKs[k], 500, 0.001, SmoothMode.Sum);
-                }
+                });
+                // for (int k = 0; k < keyCount; k++)
 
                 double[] jBar = new double[baseCorners.Length];
 
@@ -599,7 +608,8 @@ namespace LAsOsuBeatmapParser.Analysis
                     fastCross[i] = new double[baseCorners.Length];
                 }
 
-                for (int k = 0; k <= keyCount; k++)
+                // Parallel.For(0, keyCount + 1, k =>
+                Parallel.For(0, keyCount + 1, k =>
                 {
                     var pair = new List<NoteData>();
 
@@ -614,7 +624,7 @@ namespace LAsOsuBeatmapParser.Analysis
                     }
 
                     pair.Sort(NoteComparer);
-                    if (pair.Count < 2) continue;
+                    if (pair.Count < 2) return;
 
                     for (int i = 1; i < pair.Count; i++)
                     {
@@ -641,7 +651,8 @@ namespace LAsOsuBeatmapParser.Analysis
                             fastCross[k][idx] = Math.Max(0, 0.4 * Math.Pow(Math.Max(Math.Max(delta, 0.06), 0.75 * x), -2) - 80);
                         }
                     }
-                }
+                });
+                // for (int k = 0; k <= keyCount; k++)
 
                 double[] xBase = new double[baseCorners.Length];
 
@@ -836,7 +847,11 @@ namespace LAsOsuBeatmapParser.Analysis
                 double[] cStep  = new double[baseCorners.Length];
                 double[] ksStep = new double[baseCorners.Length];
 
-                double[] noteTimes = notes.Select(n => (double)n.HeadTime).OrderBy(v => v).ToArray();
+                var noteTimesList = new List<double>(notes.Count);
+                foreach (NoteData note in notes)
+                    noteTimesList.Add(note.HeadTime);
+                noteTimesList.Sort();
+                double[] noteTimes = noteTimesList.ToArray();
 
                 for (int idx = 0; idx < baseCorners.Length; idx++)
                 {
