@@ -48,7 +48,6 @@ impl SRCalculator {
 
         // Calculate T
         let t = note_seq.iter().map(|&(_, h, t)| h.max(t)).max().unwrap() + 1;
-        let t = if t > 1000000 { 1000000 } else { t };
 
         let (all_corners, base_corners, a_corners) = Self::get_corners(t, &note_seq);
 
@@ -333,16 +332,13 @@ impl SRCalculator {
             let mut weights = vec![];
             for col in 0..k as usize {
                 let val = jbar_ks[col][i].max(0.0);
-                if val > 0.0 {
-                    vals.push(val.powf(5.0));
-                    weights.push(1.0 / f64::max(delta_ks[col][i], 1e-9));
-                }
+                vals.push(val.powf(5.0));
+                weights.push(1.0 / f64::max(delta_ks[col][i], 1e-9));
             }
-            if !weights.is_empty() {
-                let weighted_sum: f64 = vals.iter().zip(weights.iter()).map(|(v, w)| v * w).sum();
-                let total_weight: f64 = weights.iter().sum();
-                jbar[i] = (weighted_sum / total_weight).powf(1.0 / 5.0);
-            }
+            let weighted_sum: f64 = vals.iter().zip(weights.iter()).map(|(v, w)| v * w).sum();
+            let total_weight: f64 = weights.iter().sum();
+            let combined = if total_weight <= 0.0 { 0.0 } else { weighted_sum / total_weight };
+            jbar[i] = combined.max(0.0).powf(0.2);
         }
 
         (delta_ks, jbar)
@@ -397,17 +393,12 @@ impl SRCalculator {
                 let left_idx = base_corners.partition_point(|&x| x < h1 as f64);
                 let right_idx = base_corners.partition_point(|&x| x < h2 as f64);
 
-                let mut apply_coeff = true;
-                if (left_idx < active_columns.len() && right_idx < active_columns.len()) {
-                    let left_active = &active_columns[left_idx];
-                    let right_active = &active_columns[right_idx];
-                    if (!left_active.contains(&(col.saturating_sub(1))) && !right_active.contains(&(col.saturating_sub(1))) ||
-                        !left_active.contains(&col) && !right_active.contains(&col)) {
-                        apply_coeff = false;
-                    }
-                }
+                let idx_start = left_idx.min(active_columns.len().saturating_sub(1));
+                let idx_end = right_idx.min(active_columns.len().saturating_sub(1));
 
-                if (!apply_coeff) {
+                let condition1 = if col == 0 { true } else { !active_columns[idx_start].contains(&(col - 1)) && !active_columns[idx_end].contains(&(col - 1)) };
+                let condition2 = !active_columns[idx_start].contains(&col) && !active_columns[idx_end].contains(&col);
+                if condition1 || condition2 {
                     val *= 1.0 - matrix[col];
                 }
 
@@ -511,8 +502,9 @@ impl SRCalculator {
         let mut a_step = vec![1.0; a_corners.len()];
         for i in 0..a_corners.len() {
             let s = a_corners[i];
-            let idx = Self::bisect_left(base_corners, s).saturating_sub(1);
-            let cols = &active_columns[idx.min(active_columns.len() - 1)];
+            let idx = Self::bisect_left(base_corners, s);
+            let idx = idx.min(active_columns.len().saturating_sub(1));
+            let cols = &active_columns[idx];
             for j in 0..cols.len().saturating_sub(1) {
                 let c0 = cols[j];
                 let c1 = cols[j + 1];
@@ -545,12 +537,8 @@ impl SRCalculator {
             let (k, h_i, t_i) = tail_seq[i];
             let column_notes = if (k as usize) < note_seq_by_column.len() { &note_seq_by_column[k as usize] } else { &vec![] };
 
-            let mut next_note_time = i32::MAX;
-            for &(_, h_j, _) in column_notes {
-                if (h_j > t_i && h_j < next_note_time) {
-                    next_note_time = h_j;
-                }
-            }
+            let index = column_notes.iter().position(|&n| n.1 == h_i).unwrap_or(0);
+            let next_note_time = if index + 1 < column_notes.len() { column_notes[index + 1].1 } else { 1000000000 };
 
             let i_h = 0.001 * ((t_i - h_i - 80) as f64).abs() / x;
             let i_t = 0.001 * ((next_note_time - t_i - 80) as f64).abs() / x;
@@ -730,27 +718,30 @@ impl SRCalculator {
         note_seq: &[(i32, i32, i32)],
         ln_seq: &[(i32, i32, i32)],
     ) -> f64 {
-        // Combine and sort by difficulty
-        let mut combined: Vec<(f64, f64)> = difficulties.iter().zip(weights.iter()).map(|(&d, &w)| (d, w.max(0.0))).collect();
+        // Combine and sort by difficulty, stable sort to match C#
+        let mut combined: Vec<(usize, f64, f64)> = difficulties.iter().enumerate().map(|(idx, &d)| (idx, d, weights[idx].max(0.0))).collect();
         combined.sort_by(|a, b| {
             use std::cmp::Ordering;
-            if (a.0.is_nan() && b.0.is_nan()) {
+            if (a.1.is_nan() && b.1.is_nan()) {
                 Ordering::Equal
-            } else if (a.0.is_nan()) {
+            } else if (a.1.is_nan()) {
                 Ordering::Greater
-            } else if (b.0.is_nan()) {
+            } else if (b.1.is_nan()) {
                 Ordering::Less
             } else {
-                a.0.partial_cmp(&b.0).unwrap()
+                match a.1.partial_cmp(&b.1).unwrap() {
+                    Ordering::Equal => a.0.cmp(&b.0),  // stable by original index
+                    ord => ord,
+                }
             }
         });
-
+        
         if (combined.is_empty()) {
             return 0.0;
         }
-
-        let sorted_d: Vec<f64> = combined.iter().map(|(d, _)| *d).collect();
-        let sorted_weights: Vec<f64> = combined.iter().map(|(_, w)| *w).collect();
+        
+        let sorted_d: Vec<f64> = combined.iter().map(|(_, d, _)| *d).collect();
+        let sorted_weights: Vec<f64> = combined.iter().map(|(_, _, w)| *w).collect();
 
         // Cumulative weights
         let mut cumulative = vec![0.0; sorted_weights.len()];

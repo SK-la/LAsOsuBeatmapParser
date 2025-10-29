@@ -22,6 +22,11 @@ namespace LAsOsuBeatmapParser.Objects.Legacy
             this.formatVersion = formatVersion;
         }
 
+        /// <summary>
+        ///     覆盖基类方法，解析文本为 HitObject 对象。
+        /// </summary>
+        /// <param name="text"></param>
+        /// <returns></returns>
         public override HitObject? Parse(string text)
         {
             string[] split = text.Split(',');

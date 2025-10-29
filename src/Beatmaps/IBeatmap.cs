@@ -43,7 +43,7 @@ namespace LAsOsuBeatmapParser.Beatmaps
         IBeatmap Clone();
 
         /// <summary>
-        ///     Returns statistics for the <see cref="HitObjects" /> contained in this beatmap.
+        ///     返回静态的基于HitObject的谱面统计数据对象。
         /// </summary>
         IEnumerable<BeatmapStatistic> GetStatistics();
 

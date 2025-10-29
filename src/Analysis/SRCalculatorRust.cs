@@ -2,14 +2,14 @@
 // See the LICENCE file in the repository root for full licence text.
 
 using System;
-using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
-using System.Text.Json;
-using LAsOsuBeatmapParser.Beatmaps;
 
 namespace LAsOsuBeatmapParser.Analysis
 {
+    /// <summary>
+    ///     Rust实现的SR计算器
+    /// </summary>
     public static class SRCalculatorRust
     {
         private const string DllName = "rust_sr_calculator.dll";
@@ -17,6 +17,11 @@ namespace LAsOsuBeatmapParser.Analysis
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true, CharSet = CharSet.Ansi)]
         private static extern double calculate_sr_from_osu_file(IntPtr pathPtr, UIntPtr len);
 
+        /// <summary>
+        ///     文件解析SR算法，rust实现，失败返回null
+        /// </summary>
+        /// <param name="filePath"></param>
+        /// <returns></returns>
         public static double? CalculateSR_FromFile(string filePath)
         {
             if (string.IsNullOrEmpty(filePath))

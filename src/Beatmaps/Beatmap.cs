@@ -56,6 +56,9 @@ namespace LAsOsuBeatmapParser.Beatmaps
         [JsonIgnore]
         public List<TimingPoint> TimingPoints { get; set; } = new List<TimingPoint>();
 
+        /// <summary>
+        ///     公开事件列表。
+        /// </summary>
         public List<Event> Events { get; set; } = new List<Event>();
 
         /// <summary>
