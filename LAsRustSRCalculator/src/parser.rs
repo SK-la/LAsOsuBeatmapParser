@@ -75,7 +75,7 @@ impl OsuParser {
             }
         }
         
-        println!("Total lines processed: {}, Hit objects parsed: {}", line_count, self.columns.len());
+        debug_log!("Total lines processed: {}, Hit objects parsed: {}", line_count, self.columns.len());
         Ok(())
     }
 

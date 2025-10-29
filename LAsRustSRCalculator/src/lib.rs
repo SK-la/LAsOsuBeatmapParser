@@ -10,12 +10,22 @@ use std::os::raw::c_char;
 
 pub struct SRAPI;
 
+#[cfg(debug_assertions)]
+macro_rules! debug_log {
+    ($($arg:tt)*) => (println!($($arg)*));
+}
+
+#[cfg(not(debug_assertions))]
+macro_rules! debug_log {
+    ($($arg:tt)*) => {};
+}
+
 impl SRAPI {
     pub fn calculate_sr(file_path: &str) -> Result<f64, String> {
         let mut parser = OsuParser::new(file_path);
         parser.process().map_err(|e| e.to_string())?;
         let data = parser.get_parsed_data();
-        println!("Parsed data: k={}, od={}, notes={}", data.column_count, data.od, data.columns.len());
+        debug_log!("Parsed data: k={}, od={}, notes={}", data.column_count, data.od, data.columns.len());
         SRCalculator::calculate_sr_from_parsed_data(&data)
     }
 }
@@ -26,32 +36,47 @@ pub extern "C" fn calculate_sr_from_osu_file(path_ptr: *const c_char, len: usize
     let path_bytes = unsafe { std::slice::from_raw_parts(path_ptr as *const u8, len) };
     let path_str = match std::str::from_utf8(path_bytes) {
         Ok(s) => s,
-        Err(_) => return -2.0,
+        Err(e) => {
+            eprintln!("[SR][ERROR] 路径字符串无效: {:?}, 错误: {}", path_bytes, e);
+            return -2.0;
+        }
     };
 
-    println!("Rust: Received path: {}", path_str);
+    debug_log!("Rust: Received path: {}", path_str);
 
     let file = match std::fs::File::open(path_str) {
         Ok(f) => f,
-        Err(_) => return -3.0,
+        Err(e) => {
+            eprintln!("[SR][ERROR] 文件打开失败: {}, 错误: {}", path_str, e);
+            return -3.0;
+        }
     };
 
     let mut parser = OsuParser::new(path_str);
-    if let Err(_) = parser.process() {
+    if let Err(e) = parser.process() {
+        eprintln!("[SR][ERROR] 解析失败: {}, 错误: {}", path_str, e);
         return -4.0;
     }
 
     let data = parser.get_parsed_data();
     if data.column_count < 1 || data.od < 0.0 {
+        eprintln!("[SR][ERROR] 数据非法: {}, column_count: {}, od: {}", path_str, data.column_count, data.od);
         return -5.0;
     }
 
-    match SRCalculator::calculate_sr_from_parsed_data(&data) {
-        Ok(sr) => {
-            println!("Rust: Calculated SR: {}", sr);
+    match std::panic::catch_unwind(|| SRCalculator::calculate_sr_from_parsed_data(&data)) {
+        Ok(Ok(sr)) => {
+            debug_log!("Rust: Calculated SR: {}", sr);
             sr
         },
-        Err(_) => -6.0,
+        Ok(Err(e)) => {
+            eprintln!("[SR][ERROR] SR计算失败: {}, 错误: {}", path_str, e);
+            -6.0
+        },
+        Err(_) => {
+            eprintln!("[SR][ERROR] SR计算panic: {}", path_str);
+            -7.0
+        },
     }
 }
 

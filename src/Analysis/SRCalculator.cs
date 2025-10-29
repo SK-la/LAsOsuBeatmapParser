@@ -55,9 +55,17 @@ namespace LAsOsuBeatmapParser.Analysis
         /// <returns>Calculated SR value.</returns>
         public double CalculateSRFromFileCS(string filePath)
         {
-            var     decoder = new LegacyBeatmapDecoder();
-            Beatmap beatmap = decoder.Decode(filePath);
-            return CalculateSR(beatmap, out _);
+            try
+            {
+                var     decoder = new LegacyBeatmapDecoder();
+                Beatmap beatmap = decoder.Decode(filePath);
+                return CalculateSR(beatmap, out _);
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[SR][ERROR] 文件: {filePath}, 异常: {ex.Message}");
+                return -1.0;
+            }
         }
 
         /// <summary>
@@ -67,10 +75,18 @@ namespace LAsOsuBeatmapParser.Analysis
         /// <returns>Calculated SR value.</returns>
         public double CalculateSRFromContentCS(string content)
         {
-            var       decoder = new LegacyBeatmapDecoder();
-            using var stream  = new MemoryStream(Encoding.UTF8.GetBytes(content));
-            Beatmap   beatmap = decoder.Decode(stream);
-            return CalculateSR(beatmap, out _);
+            try
+            {
+                var       decoder = new LegacyBeatmapDecoder();
+                using var stream  = new MemoryStream(Encoding.UTF8.GetBytes(content));
+                Beatmap   beatmap = decoder.Decode(stream);
+                return CalculateSR(beatmap, out _);
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[SR][ERROR] 内容解析失败: {ex.Message}");
+                return -1.0;
+            }
         }
 
         private static (double sr, Dictionary<string, long> times) ComputeInternal<T>(IBeatmap<T> beatmap) where T : HitObject

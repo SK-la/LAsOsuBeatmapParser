@@ -25,7 +25,10 @@ namespace LAsOsuBeatmapParser.Analysis
         public static double? CalculateSR_FromFile(string filePath)
         {
             if (string.IsNullOrEmpty(filePath))
+            {
+                Console.Error.WriteLine($"[SR][ERROR] 文件路径为空");
                 return null;
+            }
 
             try
             {
@@ -38,18 +41,33 @@ namespace LAsOsuBeatmapParser.Analysis
                 Marshal.FreeHGlobal(pathPtr);
 
                 // Check for error (negative values indicate errors)
-                if (result < 0.0 || double.IsNaN(result))
+                if (result < 0.0)
                 {
-                    Console.WriteLine($"Rust SR calculation returned invalid value: {result}");
+                    string reason = result switch
+                    {
+                        -2.0 => "路径字符串无效",
+                        -3.0 => "文件打开失败",
+                        -4.0 => "解析失败",
+                        -5.0 => "数据非法",
+                        -6.0 => "SR计算失败",
+                        -7.0 => "SR计算panic",
+                        _ => "未知错误"
+                    };
+                    Console.Error.WriteLine($"[SR][ERROR] 文件: {filePath}, 错误: {reason} (错误码: {result})");
+                    return null;
+                }
+
+                if (double.IsNaN(result))
+                {
+                    Console.Error.WriteLine($"[SR][ERROR] 文件: {filePath}, 错误: 计算结果为NaN");
                     return null;
                 }
 
                 return result;
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                // Return null on any error (including Rust panics)
-                // throw new Exception($"Error calling Rust DLL: {ex.Message}");
+                Console.Error.WriteLine($"[SR][ERROR] 文件: {filePath}, 异常: {ex.Message}");
                 return null;
             }
         }

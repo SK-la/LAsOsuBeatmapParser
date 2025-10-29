@@ -16,7 +16,7 @@ namespace LAsOsuBeatmapParser.Extensions
         /// </summary>
         /// <typeparam name="T">HitObject类型。</typeparam>
         /// <param name="beatmap">谱面对象。</param>
-        /// <returns>Beatmap<ManiaHitObject> 对象。</returns>
+        /// <returns>Beatmap&lt;ManiaHitObject&gt; 对象。</returns>
         /// <exception cref="InvalidModeException">如果模式不是 Mania 则抛出异常。</exception>
         public static Beatmap<ManiaHitObject> GetManiaBeatmap<T>(this Beatmap<T> beatmap) where T : HitObject
         {
