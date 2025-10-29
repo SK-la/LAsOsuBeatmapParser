@@ -25,7 +25,7 @@ namespace LAsOsuBeatmapParser.Analysis
             try
             {
                 byte[] pathBytes = Encoding.UTF8.GetBytes(filePath);
-                IntPtr pathPtr   = Marshal.AllocHGlobal(pathBytes.Length);
+                IntPtr pathPtr = Marshal.AllocHGlobal(pathBytes.Length);
                 Marshal.Copy(pathBytes, 0, pathPtr, pathBytes.Length);
 
                 double result = calculate_sr_from_osu_file(pathPtr, (UIntPtr)pathBytes.Length);

@@ -26,21 +26,32 @@ pub extern "C" fn calculate_sr_from_osu_file(path_ptr: *const c_char, len: usize
     let path_bytes = unsafe { std::slice::from_raw_parts(path_ptr as *const u8, len) };
     let path_str = match std::str::from_utf8(path_bytes) {
         Ok(s) => s,
-        Err(_) => return -1.0, // Error indicator
+        Err(_) => return -2.0,
     };
 
     println!("Rust: Received path: {}", path_str);
 
-    // Calculate SR
-    match SRAPI::calculate_sr(path_str) {
+    let file = match std::fs::File::open(path_str) {
+        Ok(f) => f,
+        Err(_) => return -3.0,
+    };
+
+    let mut parser = OsuParser::new(path_str);
+    if let Err(_) = parser.process() {
+        return -4.0;
+    }
+
+    let data = parser.get_parsed_data();
+    if data.column_count < 1 || data.od < 0.0 {
+        return -5.0;
+    }
+
+    match SRCalculator::calculate_sr_from_parsed_data(&data) {
         Ok(sr) => {
             println!("Rust: Calculated SR: {}", sr);
             sr
         },
-        Err(e) => {
-            println!("Rust: Error calculating SR: {}", e);
-            -1.0 // Error indicator
-        }
+        Err(_) => -6.0,
     }
 }
 

@@ -413,7 +413,7 @@ impl SRCalculator {
 
                 for j in left_idx..right_idx {
                     x_ks[col][j] = val;
-                    fast_cross[col][j] = (0.4 * (delta.max(0.06).max(0.75 * x)).powf(-2.0)).max(0.0) - 80.0;
+                    fast_cross[col][j] = (0.4 * (delta.max(0.06).max(0.75 * x)).powf(-2.0) - 80.0).max(0.0);
                 }
             }
         }

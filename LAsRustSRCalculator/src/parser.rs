@@ -1,5 +1,5 @@
 use std::fs::File;
-use std::io::{BufRead, BufReader, Read};
+use std::io::{BufRead, BufReader};
 use std::path::Path;
 
 #[derive(Debug)]
@@ -37,21 +37,14 @@ impl OsuParser {
 
     pub fn process(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         let file = File::open(&self.file_path)?;
-        let mut reader = BufReader::new(file);
-        let mut content = String::new();
-        reader.read_to_string(&mut content)?;
+        let reader = BufReader::new(file);
 
-        // Remove BOM if present
-        let content = if content.starts_with("\u{feff}") {
-            &content[3..]
-        } else {
-            &content
-        };
-
+        let mut lines = reader.lines();
         let mut in_hit_objects = false;
         let mut line_count = 0;
 
-        for line in content.lines() {
+        while let Some(line) = lines.next() {
+            let line = line?;
             line_count += 1;
             
             // Check for section headers
@@ -111,6 +104,8 @@ impl OsuParser {
         -1
     }
 
+
+
     fn parse_hit_object(&mut self, object_line: &str, column_count: i32) {
         let params: Vec<&str> = object_line.split(',').collect();
         if params.len() < 6 {
@@ -118,7 +113,9 @@ impl OsuParser {
         }
 
         let x: f64 = params[0].parse().unwrap_or(0.0);
-        let column = (x * column_count as f64 / 512.0).floor() as i32;
+        let offset = 256.0 / column_count as f64;
+        let ratio = 512.0 / column_count as f64;
+        let column = ((x - offset) / ratio).round() as i32;
         self.columns.push(column);
 
         let note_start: i32 = params[2].parse().unwrap_or(0);
