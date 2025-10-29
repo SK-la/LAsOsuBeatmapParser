@@ -30,4 +30,8 @@
         <Folder Include="Resource\"/>
     </ItemGroup>
 
+    <ItemGroup>
+        <Content Include="..\src\Analysis\rust_sr_calculator.dll" CopyToOutputDirectory="PreserveNewest"/>
+    </ItemGroup>
+
 </Project>

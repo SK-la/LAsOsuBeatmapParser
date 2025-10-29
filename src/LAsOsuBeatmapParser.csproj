@@ -20,6 +20,6 @@
         <Folder Include="FakeFrameWork\"/>
     </ItemGroup>
     <ItemGroup>
-        <Content Include="Analysis\rust_sr_calculator.dll" CopyToOutputDirectory="PreserveNewest"/>
+        <None Include="Analysis\rust_sr_calculator.dll" Pack="true" PackagePath="runtimes/win-x64/native/"/>
     </ItemGroup>
 </Project>

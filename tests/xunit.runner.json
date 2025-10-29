@@ -2,5 +2,7 @@
   "parallelizeAssembly": false,
   "parallelizeTestCollections": false,
   "maxParallelThreads": 1,
-  "parallelAlgorithm": "conservative"
+  "parallelAlgorithm": "conservative",
+  "diagnosticMessages": true,
+  "internalDiagnosticMessages": true
 }

@@ -15,6 +15,7 @@ impl SRAPI {
         let mut parser = OsuParser::new(file_path);
         parser.process().map_err(|e| e.to_string())?;
         let data = parser.get_parsed_data();
+        println!("Parsed data: k={}, od={}, notes={}", data.column_count, data.od, data.columns.len());
         SRCalculator::calculate_sr_from_parsed_data(&data)
     }
 }
@@ -50,7 +51,7 @@ mod tests {
     #[test]
     fn test_sr_calculation() {
         // Use the actual osu file for testing
-        let file_path = "E:\\BASE CODE\\GitHub\\LAsOsuBeatmapParser\\tests\\Resource\\Glen Check - 60's Cardin (SK_la) [Insane].osu";
+        let file_path = "..\\tests\\Resource\\Glen Check - 60's Cardin (SK_la) [Insane].osu";
         println!("Testing with file: {}", file_path);
 
         // Check if file exists
