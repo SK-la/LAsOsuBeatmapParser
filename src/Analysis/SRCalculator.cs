@@ -163,8 +163,8 @@ namespace LAsOsuBeatmapParser.Analysis
                     throw new NotSupportedException($"Key mode {keyCount}k is not supported by the SR algorithm.");
 
                 int estimatedNotes = beatmap.HitObjects.Count;
-                var notes         = new List<NoteData>(estimatedNotes);
-                var notesByColumn = new List<NoteData>[keyCount];
+                var notes          = new List<NoteData>(estimatedNotes);
+                var notesByColumn  = new List<NoteData>[keyCount];
                 for (int i = 0; i < keyCount; i++)
                     notesByColumn[i] = new List<NoteData>(estimatedNotes / keyCount + 1);
 

@@ -77,7 +77,7 @@ namespace LAsOsuBeatmapParser.Tests
             _output.WriteLine("---|---------|-------|-------|-----------|---------|---------");
 
             foreach ((double cs, double? rustSr, long rustTime, double? csSr, long csTime, double? pySr, long pyTime) in results)
-                _output.WriteLine($"{cs,-3:F1} | {rustSr:F4} | {csSr:F4} | {pySr:F4} | {rustTime,9} | {csTime,7} | {pyTime,7}");
+                _output.WriteLine($"{cs} | {rustSr:F4} | {csSr:F4} | {pySr:F4} | {rustTime,8} | {csTime,7} | {pyTime,7}");
 
             double avgRustTime = results.Average(r => r.RustTime);
             double avgCsTime   = results.Average(r => r.CsTime);
