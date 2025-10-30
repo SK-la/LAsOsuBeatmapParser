@@ -6,7 +6,7 @@
         <Nullable>enable</Nullable>
         <GenerateDocumentationFile>true</GenerateDocumentationFile>
         <PackageId>LAsOsuBeatmapParser</PackageId>
-        <Version>1.0.1-beta</Version>
+        <Version>1.0.3-beta</Version>
         <Authors>SK-la</Authors>
         <Copyright>Copyright © 2025 SK-la</Copyright>
         <Description>A lightweight, high-performance C# library for parsing osu! .osu files.</Description>

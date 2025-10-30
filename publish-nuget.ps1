@@ -1,26 +1,33 @@
-﻿# publish-nuget.ps1
-# 直接右键运行即可，无需传参。需要发布正式版或 beta 版时，只需修改 $Version。
+# publish-nuget.ps1
+# Run directly by right-clicking, no parameters needed. Modify $Version for release or beta.
 
-$Version = "3.0.0-beta"   # 需要发布正式版时改为如 "2.0.0"，发布 beta 时改为 "3.0.0-beta"
-$ApiKey = $env:NUGET_API_KEY  # 从环境变量获取 API Key
+$Version = "1.0.3-beta"   # For release, change to e.g. "2.0.0", for beta "3.0.0-beta"
+$ApiKey = $env:NUGET_API_KEY
+
+if (-not $ApiKey) {
+    Write-Host "Error: Environment variable NUGET_API_KEY is not set. Please set the API Key first."
+    exit 1
+}
 
 $csproj = "e:\BASE CODE\GitHub\LAsOsuBeatmapParser\src\LAsOsuBeatmapParser.csproj"
 
-Write-Host "切换版本号为 $Version ..."
-(Get-Content $csproj) -replace '<Version>.*?</Version>', "<Version>$Version</Version>" | Set-Content $csproj
+Write-Host "Switching version to $Version ..."
+$pattern = '<Version>.*?</Version>'
+$replacement = "<Version>$Version</Version>"
+(Get-Content $csproj) -replace $pattern, $replacement | Set-Content $csproj
 
-Write-Host "开始打包..."
+Write-Host "Starting packaging..."
 dotnet pack $csproj -c Release
 
 $nupkg = Get-ChildItem -Path "e:\BASE CODE\GitHub\LAsOsuBeatmapParser\src\bin\Release" -Filter "*.nupkg" | Sort-Object LastWriteTime -Descending | Select-Object -First 1
 
 if ($nupkg) {
-    Write-Host "推送到 NuGet.org ..."
+    Write-Host "Pushing to NuGet.org ..."
     dotnet nuget push $nupkg.FullName --api-key $ApiKey --source https://api.nuget.org/v3/index.json
-    Write-Host "发布完成！"
+    Write-Host "Publishing completed!"
 } else {
-    Write-Host "未找到 nupkg 文件，打包失败。"
+    Write-Host "No nupkg file found, packaging failed."
 }
 
-# 可选：恢复为 beta 版本（自动用 $Version 变量，发布后如需回到 beta 状态，先手动改 $Version 再取消注释）
-# (Get-Content $csproj) -replace '<Version>.*?</Version>', "<Version>$Version</Version>" | Set-Content $csproj
+# Optional: Restore to beta version (uses $Version variable, uncomment after publishing if needed to return to beta)
+# (Get-Content $csproj) -replace $pattern, $replacement | Set-Content $csproj

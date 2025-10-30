@@ -32,6 +32,7 @@ impl SRAPI {
     }
 }
 
+#[allow(unsafe_code)]
 #[unsafe(no_mangle)]
 pub extern "C" fn calculate_sr_from_osu_file(path_ptr: *const c_char, len: usize) -> f64 {
     // Convert the C string to Rust string
@@ -46,13 +47,13 @@ pub extern "C" fn calculate_sr_from_osu_file(path_ptr: *const c_char, len: usize
 
     debug_log!("Rust: Received path: {}", path_str);
 
-    // let file = match std::fs::File::open(path_str) {
-    //     Ok(f) => f,
-    //     Err(e) => {
-    //         eprintln!("[SR][ERROR] 文件打开失败: {}, 错误: {}", path_str, e);
-    //         return -3.0;
-    //     }
-    // };
+    let file = match std::fs::File::open(path_str) {
+        Ok(f) => f,
+        Err(e) => {
+            eprintln!("[SR][ERROR] 文件打开失败: {}, 错误: {}", path_str, e);
+            return -3.0;
+        }
+    };
 
     let mut parser = OsuParser::new(path_str);
     if let Err(e) = parser.process() {
@@ -71,6 +72,7 @@ pub extern "C" fn calculate_sr_from_osu_file(path_ptr: *const c_char, len: usize
         return 0.0;
     }
 
+    debug_log!("Rust: Calculating SR for {}", path_str);
     match std::panic::catch_unwind(|| SRCalculator::calculate_sr_from_parsed_data(&data)) {
         Ok(Ok(sr)) => {
             debug_log!("Rust: Calculated SR: {}", sr);
