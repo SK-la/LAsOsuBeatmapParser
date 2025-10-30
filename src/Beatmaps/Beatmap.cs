@@ -78,11 +78,6 @@ namespace LAsOsuBeatmapParser.Beatmaps
         public double BPM { get; set; }
 
         /// <summary>
-        ///     用于分析工具的时间-音符矩阵。
-        /// </summary>
-        public Dictionary<double, List<T>> Matrix { get; set; } = new Dictionary<double, List<T>>();
-
-        /// <summary>
         ///     Letterbox in breaks.
         /// </summary>
         public bool LetterboxInBreaks { get; set; }
@@ -473,23 +468,6 @@ namespace LAsOsuBeatmapParser.Beatmaps
             }
 
             return 120.0; // 默认BPM
-        }
-
-        /// <summary>
-        ///     为分析工具构建时间-音符矩阵。
-        /// </summary>
-        /// <returns>映射时间到音符列表的字典。</returns>
-        public Dictionary<double, List<T>> BuildMatrix()
-        {
-            var matrix = new Dictionary<double, List<T>>();
-
-            foreach (T hitObject in HitObjects)
-            {
-                if (!matrix.ContainsKey(hitObject.StartTime)) matrix[hitObject.StartTime] = new List<T>();
-                matrix[hitObject.StartTime].Add(hitObject);
-            }
-
-            return matrix;
         }
 
         /// <summary>

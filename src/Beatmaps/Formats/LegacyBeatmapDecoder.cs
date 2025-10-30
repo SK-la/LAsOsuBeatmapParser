@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Numerics;
 using System.Threading.Tasks;
 using LAsOsuBeatmapParser.Exceptions;
@@ -86,6 +87,7 @@ namespace LAsOsuBeatmapParser.Beatmaps.Formats
         {
             var    beatmap        = new Beatmap();
             string currentSection = "";
+            var    hitObjectLines = new List<string>();
 
             while (reader.ReadLine() is { } line)
             {
@@ -111,12 +113,27 @@ namespace LAsOsuBeatmapParser.Beatmaps.Formats
                 if (line.StartsWith("//") && currentSection != "Events")
                     continue;
 
-                ParseLine(beatmap, currentSection, line);
+                if (currentSection == "HitObjects")
+                {
+                    hitObjectLines.Add(line);
+                }
+                else
+                {
+                    ParseLine(beatmap, currentSection, line);
+                }
             }
 
-            // 解析后计算 BPM 和 Matrix
-            beatmap.BPM    = beatmap.GetBPM();
-            beatmap.Matrix = beatmap.BuildMatrix();
+            // 解析前去重 HitObjects 行，然后解析
+            foreach (var line in hitObjectLines.Distinct())
+            {
+                ParseHitObject(beatmap, line);
+            }
+
+            // 解析后排序 HitObjects（按 StartTime），以匹配官方行为
+            beatmap.HitObjects = beatmap.HitObjects.OrderBy(h => h.StartTime).ToList();
+
+            // 解析后计算 BPM
+            beatmap.BPM = beatmap.GetBPM();
 
             return beatmap;
         }
@@ -141,10 +158,6 @@ namespace LAsOsuBeatmapParser.Beatmaps.Formats
 
                     case "TimingPoints":
                         ParseTimingPoint(beatmap, line);
-                        break;
-
-                    case "HitObjects":
-                        ParseHitObject(beatmap, line);
                         break;
 
                     case "Events":
