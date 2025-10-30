@@ -48,7 +48,7 @@ namespace LAsOsuBeatmapParser.Tests
         {
             // Arrange
             Assert.True(File.Exists(SingleTestFile), $"Test file not found: {SingleTestFile}");
-            var     decoder = new LegacyBeatmapDecoder();
+            var decoder = new LegacyBeatmapDecoder();
             Beatmap beatmap = decoder.Decode(SingleTestFile);
 
             _output.WriteLine("=== 生产环境C# SR算法 - 单一文件循环3次测试 ===");
@@ -69,12 +69,12 @@ namespace LAsOsuBeatmapParser.Tests
             {
                 long initialMemory = GC.GetAllocatedBytesForCurrentThread();
 
-                var    stopwatch = Stopwatch.StartNew();
-                double sr        = SRCalculator.Instance.CalculateSR(beatmap, out Dictionary<string, long> times);
+                var stopwatch = Stopwatch.StartNew();
+                double sr = SRCalculator.Instance.CalculateSR(beatmap, out Dictionary<string, long> times);
                 stopwatch.Stop();
 
                 long finalMemory = GC.GetAllocatedBytesForCurrentThread();
-                long memoryUsed  = finalMemory - initialMemory;
+                long memoryUsed = finalMemory - initialMemory;
 
                 results.Add((sr, stopwatch.ElapsedMilliseconds, memoryUsed));
 
@@ -106,8 +106,8 @@ namespace LAsOsuBeatmapParser.Tests
             }
 
             // 计算平均值
-            double avgSR     = results.Average(r => r.sr);
-            double avgTime   = results.Average(r => r.timeMs);
+            double avgSR = results.Average(r => r.sr);
+            double avgTime = results.Average(r => r.timeMs);
             double avgMemory = results.Average(r => r.memoryBytes);
 
             _output.WriteLine("=== 平均结果 ===");
@@ -123,7 +123,7 @@ namespace LAsOsuBeatmapParser.Tests
         public void TestProductionCSRSingleFile_MultipleFiles()
         {
             // Arrange
-            var       decoder  = new LegacyBeatmapDecoder();
+            var decoder = new LegacyBeatmapDecoder();
             Beatmap[] beatmaps = MultipleTestFiles.Select(f => decoder.Decode(f)).ToArray();
 
             _output.WriteLine("=== 生产环境C# SR算法 - 多个文件测试 ===");
@@ -140,17 +140,17 @@ namespace LAsOsuBeatmapParser.Tests
             // Act - 计算多个文件
             foreach (string filePath in MultipleTestFiles)
             {
-                Beatmap beatmap  = decoder.Decode(filePath);
-                string  fileName = Path.GetFileName(filePath);
+                Beatmap beatmap = decoder.Decode(filePath);
+                string fileName = Path.GetFileName(filePath);
 
                 long initialMemory = GC.GetAllocatedBytesForCurrentThread();
 
-                var    stopwatch = Stopwatch.StartNew();
-                double sr        = SRCalculator.Instance.CalculateSR(beatmap, out Dictionary<string, long> times);
+                var stopwatch = Stopwatch.StartNew();
+                double sr = SRCalculator.Instance.CalculateSR(beatmap, out Dictionary<string, long> times);
                 stopwatch.Stop();
 
                 long finalMemory = GC.GetAllocatedBytesForCurrentThread();
-                long memoryUsed  = finalMemory - initialMemory;
+                long memoryUsed = finalMemory - initialMemory;
 
                 results.Add((beatmap.BeatmapInfo.Difficulty.CircleSize, sr, stopwatch.ElapsedMilliseconds, memoryUsed));
 
@@ -181,10 +181,10 @@ namespace LAsOsuBeatmapParser.Tests
             }
 
             // 计算统计信息
-            double avgSR       = results.Average(r => r.sr);
-            double avgTime     = results.Average(r => r.timeMs);
-            double avgMemory   = results.Average(r => r.memoryBytes);
-            double totalTime   = results.Sum(r => r.timeMs);
+            double avgSR = results.Average(r => r.sr);
+            double avgTime = results.Average(r => r.timeMs);
+            double avgMemory = results.Average(r => r.memoryBytes);
+            double totalTime = results.Sum(r => r.timeMs);
             double totalMemory = results.Sum(r => r.memoryBytes);
 
             _output.WriteLine("=== 统计结果 ===");
@@ -196,6 +196,73 @@ namespace LAsOsuBeatmapParser.Tests
             _output.WriteLine("");
 
             _output.WriteLine("✅ 多个文件测试完成");
+        }
+
+        [Fact]
+        public void TestCustomMatrixFunctionality()
+        {
+            // Arrange
+            Assert.True(File.Exists(SingleTestFile), $"Test file not found: {SingleTestFile}");
+            var decoder = new LegacyBeatmapDecoder();
+            Beatmap beatmap = decoder.Decode(SingleTestFile);
+
+            int keyCount = (int)Math.Round(beatmap.BeatmapInfo.Difficulty.CircleSize);
+            _output.WriteLine("=== 自定义矩阵功能测试 ===");
+            _output.WriteLine($"谱面键数: {keyCount}k");
+
+            // 获取默认矩阵
+            double[]? defaultMatrix = CrossMatrixProvider.GetMatrix(keyCount);
+            Assert.NotNull(defaultMatrix);
+            _output.WriteLine($"默认矩阵长度: {defaultMatrix.Length}");
+
+            // 设置自定义矩阵 (稍微修改默认矩阵)
+            double[] customMatrix = new double[defaultMatrix.Length];
+
+            for (int i = 0; i < defaultMatrix.Length; i++)
+            {
+                customMatrix[i] = defaultMatrix[i] * 1.1; // 增加10%
+            }
+
+            CrossMatrixProvider.SetCustomMatrix(keyCount, customMatrix);
+
+            // 验证自定义矩阵被设置
+            double[]? retrievedMatrix = CrossMatrixProvider.GetMatrix(keyCount);
+            Assert.NotNull(retrievedMatrix);
+            Assert.Equal(customMatrix.Length, retrievedMatrix.Length);
+
+            for (int i = 0; i < customMatrix.Length; i++)
+            {
+                Assert.Equal(customMatrix[i], retrievedMatrix[i]);
+            }
+
+            _output.WriteLine("✅ 自定义矩阵设置成功");
+
+            // 计算SR使用自定义矩阵
+            double srWithCustom = SRCalculator.Instance.CalculateSR(beatmap, out _);
+            _output.WriteLine($"使用自定义矩阵的SR: {srWithCustom:F4}");
+
+            // 重置为默认
+            CrossMatrixProvider.SetCustomMatrix(keyCount, null); // 清除自定义
+
+            // 验证重置
+            double[]? resetMatrix = CrossMatrixProvider.GetMatrix(keyCount);
+            Assert.NotNull(resetMatrix);
+            Assert.Equal(defaultMatrix.Length, resetMatrix.Length);
+
+            for (int i = 0; i < defaultMatrix.Length; i++)
+            {
+                Assert.Equal(defaultMatrix[i], resetMatrix[i]);
+            }
+
+            _output.WriteLine("✅ 自定义矩阵重置成功");
+
+            // 计算SR使用默认矩阵
+            double srWithDefault = SRCalculator.Instance.CalculateSR(beatmap, out _);
+            _output.WriteLine($"使用默认矩阵的SR: {srWithDefault:F4}");
+
+            // Assert - 自定义矩阵应该导致不同的SR
+            Assert.NotEqual(srWithCustom, srWithDefault);
+            _output.WriteLine("✅ 自定义矩阵影响SR计算");
         }
     }
 }

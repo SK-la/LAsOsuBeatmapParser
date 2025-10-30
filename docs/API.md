@@ -155,9 +155,20 @@ foreach (var (time, notes) in matrix)
 ### 谱面难度分析 / Beatmap Difficulty Analysis
 
 ```csharp
-// 使用 SR 计算器 / Using SR Calculator
+// 使用 C# SR 计算器 / Using C# SR Calculator
 var calculator = SRCalculator.Instance;
 double sr = calculator.CalculateSR(maniaBeatmap);
+
+// 使用 Rust SR 计算器 (推荐) / Using Rust SR Calculator (Recommended)
+double? rustSr = SRCalculatorRust.CalculateSR_FromFile("path/to/beatmap.osu");
+if (rustSr.HasValue)
+{
+    Console.WriteLine($"Rust SR: {rustSr.Value}");
+}
+else
+{
+    Console.WriteLine("SR 计算失败");
+}
 ```
 
 ## 序列化和反序列化 / Serialization and Deserialization
@@ -344,164 +355,4 @@ osu! 官方游戏模式已占用以下ID：
 
 **自定义游戏模式必须使用大于3的ID / Custom game modes must use IDs greater than 3**
 
-### 实现自定义游戏模式 / Implementing Custom Game Modes
-
-要创建自定义游戏模式，实现 `IGameMode` 接口：
-
-```csharp
-using LAsOsuBeatmapParser.Beatmaps;
-
-public class CustomGameMode : IGameMode
-{
-    public int Id { get; }
-    public string Name { get; }
-
-    public CustomGameMode(int id, string name)
-    {
-        // 确保ID大于3 / Ensure ID is greater than 3
-        if (id <= 3)
-            throw new ArgumentException("Custom game mode IDs must be greater than 3", nameof(id));
-
-        Id = id;
-        Name = name;
-    }
-
-    public override string ToString() => Name;
-}
-```
-
-### 创建自定义谱面类型 / Creating Custom Beatmap Types
-
-为您的自定义游戏模式创建谱面类：
-
-```csharp
-using LAsOsuBeatmapParser.Beatmaps;
-
-public class CustomBeatmap : Beatmap<CustomHitObject>
-{
-    public CustomBeatmap()
-    {
-        Mode = new CustomGameMode(100, "Custom Mode");
-        // 初始化其他属性
-    }
-}
-
-public class CustomHitObject : HitObject
-{
-    // 实现您的自定义打击对象逻辑
-}
-```
-
-### 自定义解析逻辑 / Custom Parsing Logic
-
-扩展解析器以支持您的自定义模式：
-
-```csharp
-using LAsOsuBeatmapParser.Beatmaps;
-using LAsOsuBeatmapParser.Beatmaps.Formats;
-
-public class CustomBeatmapDecoder : LegacyBeatmapDecoder
-{
-    protected override HitObject ParseHitObject(string[] parts)
-    {
-        // 检查是否是您的自定义模式
-        if (CurrentBeatmap.Mode.Id == 100)
-        {
-            // 实现自定义解析逻辑
-            return ParseCustomHitObject(parts);
-        }
-
-        // 回退到默认解析
-        return base.ParseHitObject(parts);
-    }
-
-    private CustomHitObject ParseCustomHitObject(string[] parts)
-    {
-        // 您的自定义解析实现
-        return new CustomHitObject();
-    }
-}
-```
-
-### 使用自定义解析器 / Using Custom Parsers
-
-```csharp
-var customDecoder = new CustomBeatmapDecoder();
-Beatmap beatmap = customDecoder.Decode("custom_beatmap.osu");
-
-// 访问自定义模式
-if (beatmap.Mode.Id == 100)
-{
-    var customBeatmap = (CustomBeatmap)beatmap;
-    // 使用您的自定义API
-}
-```
-
-### 扩展优势 / Extension Benefits
-
-- **完全可扩展**: 支持任何数量的自定义游戏模式
-- **向后兼容**: 现有代码无需修改
-- **类型安全**: 强类型支持自定义打击对象
-- **API一致性**: 享受与标准模式相同的解析库功能
-
-### 为自定义模式创建扩展方法 / Creating Extension Methods for Custom Modes
-
-参考 `GetManiaBeatmap()` 的实现，为您的自定义游戏模式创建类似的扩展方法：
-
-```csharp
-using LAsOsuBeatmapParser.Beatmaps;
-
-public static class CustomBeatmapExtensions
-{
-    /// <summary>
-    /// 从 Beatmap 获取 PuzzleBeatmap，并验证模式。
-    /// </summary>
-    public static PuzzleBeatmap GetPuzzleBeatmap<T>(this Beatmap<T> beatmap) where T : HitObject
-    {
-        // 如果已经是PuzzleBeatmap，直接返回
-        if (typeof(T) == typeof(PuzzleHitObject) && beatmap is PuzzleBeatmap puzzleBeatmap)
-        {
-            return puzzleBeatmap;
-        }
-
-        // 验证模式ID
-        if (beatmap.Mode.Id != 100) // 您的自定义模式ID
-        {
-            throw new InvalidModeException("Beatmap mode must be Puzzle Mode.");
-        }
-
-        // 创建并返回自定义谱面
-        return new PuzzleBeatmap
-        {
-            BeatmapInfo = beatmap.BeatmapInfo,
-            ControlPointInfo = beatmap.ControlPointInfo,
-            Breaks = beatmap.Breaks,
-            MetadataLegacy = beatmap.MetadataLegacy,
-            DifficultyLegacy = beatmap.DifficultyLegacy,
-            TimingPoints = beatmap.TimingPoints,
-            HitObjects = beatmap.HitObjects.Select(h => ConvertToPuzzleHitObject(h)).ToList(),
-            Events = beatmap.Events,
-            Mode = beatmap.Mode,
-            Version = beatmap.Version
-            // 设置其他PuzzleBeatmap特定的属性
-        };
-    }
-
-    private static PuzzleHitObject ConvertToPuzzleHitObject(HitObject hitObject)
-    {
-        // 实现从通用HitObject到PuzzleHitObject的转换逻辑
-        return new PuzzleHitObject(hitObject.StartTime, "default_shape", 4);
-    }
-}
-```
-
-### 使用自定义扩展方法 / Using Custom Extension Methods
-
-```csharp
-// 使用您的自定义扩展方法
-var decoder = new BeatmapDecoder();
-Beatmap beatmap = decoder.Decode("puzzle.osu");
-
-PuzzleBeatmap puzzleBeatmap = beatmap.GetPuzzleBeatmap();
-// 现在可以使用PuzzleBeatmap的所有功能
-```
+详细实现和示例请参见 [CustomGameModeExample.md](CustomGameModeExample.md)。

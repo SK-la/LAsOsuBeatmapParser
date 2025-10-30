@@ -82,7 +82,7 @@ namespace LAsOsuBeatmapParser.Tests
                 ("C# FromContent", bm => CalculateSRFromContent(File.ReadAllText(SingleTestFile))),
                 ("C# V3.0", bm => SRCalculatorV30.Instance.CalculateSR(bm, out _)),
                 ("C# V2.3", CalculateWithV23),
-                ("Rust FromFile", bm => SRCalculatorRust.CalculateSR_FromFile(SingleTestFile) ?? -1),
+                ("Rust FromFile", bm => SRCalculatorRust.CalculateSR_FromFile(SingleTestFile)),
                 ("Python FromFile", bm =>
                     {
                         double? result = SRCalculatorPython.CalculateSR_FromFile(SingleTestFile);
@@ -171,7 +171,7 @@ namespace LAsOsuBeatmapParser.Tests
                 ("C# V2.3", (bm, fp) => CalculateWithV23(bm)),
                 ("C# FromFile", (bm, fp) => CalculateSRFromFile(fp)),
                 ("C# FromContent", (bm, fp) => CalculateSRFromContent(File.ReadAllText(fp))),
-                ("Rust FromFile", (bm, fp) => SRCalculatorRust.CalculateSR_FromFile(fp) ?? -1),
+                ("Rust FromFile", (bm, fp) => SRCalculatorRust.CalculateSR_FromFile(fp)),
                 ("Python FromFile", (bm, fp) => SRCalculatorPython.CalculateSR_FromFile(fp) ?? -1)
             };
 
