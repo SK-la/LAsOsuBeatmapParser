@@ -203,6 +203,65 @@ namespace LAsOsuBeatmapParser.Tests
             _output.WriteLine("✅ 多个文件不同版本测试完成");
         }
 
+        [Fact]
+        public void TestBatchCalculateSRFromFolder()
+        {
+            string folderPath = @"F:\MUG OSU\osu test\Songs\la's map";
+
+            if (!Directory.Exists(folderPath))
+            {
+                _output.WriteLine($"文件夹不存在: {folderPath}");
+                return;
+            }
+
+            string[] osuFiles = Directory.GetFiles(folderPath, "*.osu", SearchOption.AllDirectories);
+            _output.WriteLine($"找到 {osuFiles.Length} 个.osu文件");
+
+            foreach (string file in osuFiles)
+            {
+                try
+                {
+                    double sr = SRCalculatorRust.CalculateSR_FromFile(file);
+                    _output.WriteLine($"{Path.GetFileName(file)}: SR = {sr:F4}");
+                }
+                catch (Exception ex)
+                {
+                    _output.WriteLine($"{Path.GetFileName(file)}: 错误 - {ex.Message}");
+                }
+            }
+        }
+
+        [Fact]
+        public void TestBatchCalculateSRFromFolderCSharp()
+        {
+            string folderPath = @"F:\MUG OSU\osu test\Songs\la's map";
+
+            if (!Directory.Exists(folderPath))
+            {
+                _output.WriteLine($"文件夹不存在: {folderPath}");
+                return;
+            }
+
+            string[] osuFiles = Directory.GetFiles(folderPath, "*.osu", SearchOption.AllDirectories);
+            _output.WriteLine($"找到 {osuFiles.Length} 个.osu文件");
+
+            var decoder = new LegacyBeatmapDecoder();
+
+            foreach (string file in osuFiles)
+            {
+                try
+                {
+                    Beatmap beatmap = decoder.Decode(file);
+                    double sr = SRCalculator.Instance.CalculateSR(beatmap, out _);
+                    _output.WriteLine($"{Path.GetFileName(file)}: SR = {sr:F4}");
+                }
+                catch (Exception ex)
+                {
+                    _output.WriteLine($"{Path.GetFileName(file)}: 错误 - {ex.Message}");
+                }
+            }
+        }
+
         // 辅助方法：使用V2.3版本计算
         private double CalculateWithV23(Beatmap beatmap)
         {

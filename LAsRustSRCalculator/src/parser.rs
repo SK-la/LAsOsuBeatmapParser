@@ -114,9 +114,8 @@ impl OsuParser {
         }
 
         let x: f64 = params[0].parse().unwrap_or(0.0);
-        let offset = 256.0 / column_count as f64;
-        let ratio = 512.0 / column_count as f64;
-        let column = ((x - offset) / ratio).round() as i32;
+        let column = (x * column_count as f64 / 512.0).floor() as i32;
+        let column = column.max(0).min(column_count - 1);
         self.columns.push(column);
 
         let note_start: i32 = params[2].parse().unwrap_or(0);

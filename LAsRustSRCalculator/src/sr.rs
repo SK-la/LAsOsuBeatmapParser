@@ -38,7 +38,8 @@ impl SRCalculator {
         // Group notes by column
         let mut note_seq_by_column: Vec<Vec<(i32, i32, i32)>> = vec![vec![]; k as usize];
         for &note in &note_seq {
-            note_seq_by_column[note.0 as usize].push(note);
+            let col = note.0.max(0).min((k - 1) as i32) as usize;
+            note_seq_by_column[col].push(note);
         }
 
         // LN sequences
