@@ -64,6 +64,11 @@ pub extern "C" fn calculate_sr_from_osu_file(path_ptr: *const c_char, len: usize
         return -5.0;
     }
 
+    if data.columns.is_empty() {
+        eprintln!("[SR][ERROR] 没有notes: {}", path_str);
+        return 0.0;
+    }
+
     match std::panic::catch_unwind(|| SRCalculator::calculate_sr_from_parsed_data(&data)) {
         Ok(Ok(sr)) => {
             debug_log!("Rust: Calculated SR: {}", sr);

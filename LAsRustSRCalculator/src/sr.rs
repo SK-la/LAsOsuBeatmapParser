@@ -1,4 +1,6 @@
 use crate::parser::ParsedData;
+use std::collections::BTreeSet;
+use std::collections::BTreeSet;
 
 #[derive(Clone, Copy, PartialEq)]
 enum SmoothMode {
@@ -17,7 +19,7 @@ impl SRCalculator {
             return Err("Unsupported key count".to_string());
         }
 
-        // Build note_seq as in Python: list of (column, head_time, tail_time)
+        // Build note_seq as (column, head_time, tail_time)
         let mut note_seq: Vec<(i32, i32, i32)> = data.columns.iter().enumerate().map(|(i, &col)| {
             let h = data.note_starts[i];
             let t = if data.note_types[i] == 128 { data.note_ends[i] } else { -1 };
@@ -104,10 +106,50 @@ impl SRCalculator {
     }
 
     fn get_corners(t: i32, note_seq: &[(i32, i32, i32)]) -> (Vec<f64>, Vec<f64>, Vec<f64>) {
-        let mut corners_base = std::collections::BTreeSet::new();
+        let mut corners_base_set: BTreeSet<f64> = BTreeSet::new();
         for &(_, h, tail) in note_seq {
-            corners_base.insert(h);
+            corners_base_set.insert(h as f64);
             if tail >= 0 {
-                corners_base.insert(tail);
+                corners_base_set.insert(tail as f64);
             }
         }
+        let corners_base_list: Vec<f64> = corners_base_set.iter().cloned().collect();
+        for &s in &corners_base_list {
+            corners_base_set.insert(s + 501.0);
+            corners_base_set.insert(s - 499.0);
+            corners_base_set.insert(s + 1.0);
+        }
+        corners_base_set.insert(0.0);
+        corners_base_set.insert(t as f64);
+        let mut corners_base: Vec<f64> = corners_base_set.into_iter().filter(|&s| s >= 0.0 && s <= t as f64).collect();
+        corners_base.sort_by(|a, b| a.partial_cmp(b).unwrap());
+
+        let mut corners_a_set: BTreeSet<f64> = BTreeSet::new();
+        for &(_, h, tail) in note_seq {
+            corners_a_set.insert(h as f64);
+            if tail >= 0 {
+                corners_a_set.insert(tail as f64);
+            }
+        }
+        let corners_a_list: Vec<f64> = corners_a_set.iter().cloned().collect();
+        for &s in &corners_a_list {
+            corners_a_set.insert(s + 1000.0);
+            corners_a_set.insert(s - 1000.0);
+        }
+        corners_a_set.insert(0.0);
+        corners_a_set.insert(t as f64);
+        let mut corners_a: Vec<f64> = corners_a_set.into_iter().filter(|&s| s >= 0.0 && s <= t as f64).collect();
+        corners_a.sort_by(|a, b| a.partial_cmp(b).unwrap());
+
+        let mut all_corners_set: BTreeSet<f64> = BTreeSet::new();
+        for &s in &corners_base {
+            all_corners_set.insert(s);
+        }
+        for &s in &corners_a {
+            all_corners_set.insert(s);
+        }
+        let mut all_corners: Vec<f64> = all_corners_set.into_iter().collect();
+        all_corners.sort_by(|a, b| a.partial_cmp(b).unwrap());
+
+        (all_corners, corners_base, corners_a)
+    }

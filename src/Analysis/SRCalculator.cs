@@ -57,8 +57,29 @@ namespace LAsOsuBeatmapParser.Analysis
         {
             try
             {
+                if (string.IsNullOrEmpty(filePath) || !File.Exists(filePath))
+                {
+                    Console.Error.WriteLine($"[SR][ERROR] 文件路径无效或文件不存在: {filePath}");
+                    return -1.0;
+                }
+
                 var     decoder = new LegacyBeatmapDecoder();
                 Beatmap beatmap = decoder.Decode(filePath);
+
+                // 检查游戏模式
+                if (beatmap.Mode.Id != GameMode.Mania.Id)
+                {
+                    Console.Error.WriteLine($"[SR][ERROR] 文件: {filePath}, 非Mania模式 (Mode: {beatmap.Mode.Id})");
+                    return -1.0;
+                }
+
+                // 检查是否有notes
+                if (beatmap.HitObjects.Count == 0)
+                {
+                    Console.Error.WriteLine($"[SR][ERROR] 文件: {filePath}, 没有HitObjects");
+                    return 0.0;
+                }
+
                 return CalculateSR(beatmap, out _);
             }
             catch (Exception ex)

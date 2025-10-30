@@ -6,7 +6,7 @@
         <Nullable>enable</Nullable>
         <GenerateDocumentationFile>true</GenerateDocumentationFile>
         <PackageId>LAsOsuBeatmapParser</PackageId>
-        <Version>1.0.0-beta</Version>
+        <Version>1.0.1-beta</Version>
         <Authors>SK-la</Authors>
         <Copyright>Copyright © 2025 SK-la</Copyright>
         <Description>A lightweight, high-performance C# library for parsing osu! .osu files.</Description>
@@ -14,7 +14,7 @@
         <RepositoryUrl>https://github.com/SK-la/LAsOsuBeatmapParser</RepositoryUrl>
         <PackageProjectUrl>https://github.com/SK-la/LAsOsuBeatmapParser</PackageProjectUrl>
         <PackageTags>osu;beatmap;parser;osu!;game;library</PackageTags>
-        <PackageReadmeFile>../../README.md</PackageReadmeFile>
+        <PackageReadmeFile>README.md</PackageReadmeFile>
         <IncludeSymbols>true</IncludeSymbols>
         <SymbolPackageFormat>snupkg</SymbolPackageFormat>
         <!-- 禁用库项目中常见的未使用警告 -->
@@ -27,5 +27,8 @@
     </ItemGroup>
     <ItemGroup>
         <None Include="Analysis\rust_sr_calculator.dll" Pack="true" PackagePath="runtimes/win-x64/native/"/>
+    </ItemGroup>
+    <ItemGroup>
+        <None Include="README.md" Pack="true" PackagePath=""/>
     </ItemGroup>
 </Project>
