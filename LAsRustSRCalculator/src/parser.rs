@@ -1,6 +1,7 @@
 use std::fs::File;
 use std::io::{BufRead, BufReader};
-use std::path::Path;
+
+use crate::debug_log;
 
 #[derive(Debug)]
 pub struct ParsedData {
@@ -41,12 +42,12 @@ impl OsuParser {
 
         let mut lines = reader.lines();
         let mut in_hit_objects = false;
-        let mut line_count = 0;
+        let mut _line_count = 0;
 
         while let Some(line) = lines.next() {
             let line = line?;
-            line_count += 1;
-            
+            _line_count += 1;
+
             // Check for section headers
             if line.starts_with("[HitObjects]") {
                 in_hit_objects = true;
@@ -75,7 +76,7 @@ impl OsuParser {
             }
         }
         
-        debug_log!("Total lines processed: {}, Hit objects parsed: {}", line_count, self.columns.len());
+        debug_log!("Total lines processed: {}, Hit objects parsed: {}", _line_count, self.columns.len());
         Ok(())
     }
 
