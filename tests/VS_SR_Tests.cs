@@ -7,6 +7,7 @@ using BenchmarkDotNet.Attributes;
 using LAsOsuBeatmapParser.Analysis;
 using LAsOsuBeatmapParser.Beatmaps;
 using LAsOsuBeatmapParser.Beatmaps.Formats;
+using LAsOsuBeatmapParser.Tests.AnalysisSR;
 using Xunit;
 using Xunit.Abstractions;
 

@@ -10,7 +10,7 @@ namespace LAsOsuBeatmapParser.Analysis
         /// <summary>
         ///     错误代码与消息映射
         /// </summary>
-        public static readonly Dictionary<double, string> ErrorMessages = new Dictionary<double, string>
+        public static readonly Dictionary<double, string> ERROR_MESSAGES = new Dictionary<double, string>
         {
             [-2.0] = "路径字符串无效",
             [-3.0] = "文件打开失败",
@@ -27,7 +27,7 @@ namespace LAsOsuBeatmapParser.Analysis
         /// <returns>错误消息</returns>
         public static string GetErrorMessage(double code)
         {
-            return ErrorMessages.TryGetValue(code, out var msg) ? msg : "未知错误";
+            return ERROR_MESSAGES.GetValueOrDefault(code, "未知错误");
         }
     }
 }

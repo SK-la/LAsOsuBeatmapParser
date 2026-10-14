@@ -218,9 +218,9 @@ namespace LAsOsuBeatmapParser.Analysis
                 if (notes.Count == 0)
                     return 0;
 
-                notes.Sort(NoteComparer);
+                notes.Sort(note_comparer);
                 foreach (List<NoteData> columnNotes in notesByColumn)
-                    columnNotes.Sort(NoteComparer);
+                    columnNotes.Sort(note_comparer);
 
                 List<NoteData> longNotes = notes.Where(n => n.IsLongNote).ToList();
                 List<NoteData> longNotesByTails = longNotes.OrderBy(n => n.TailTime).ToList();
@@ -429,7 +429,7 @@ namespace LAsOsuBeatmapParser.Analysis
                 for (int k = 0; k < keyCount; k++)
                     usage[k] = new double[baseCorners.Length];
 
-                const double baseContribution = 3.75;
+                const double base_contribution = 3.75;
                 const double falloff = 3.75 / (400.0 * 400.0);
 
                 foreach (NoteData note in notes)
@@ -445,7 +445,7 @@ namespace LAsOsuBeatmapParser.Analysis
                     int duration = endTime - startTime;
                     double clampedDuration = Math.Min(duration, 1500);
                     double extension = clampedDuration / 150.0;
-                    double contribution = baseContribution + extension;
+                    double contribution = base_contribution + extension;
 
                     for (int idx = left; idx < right; idx++) usage[note.Column][idx] += contribution;
 
@@ -453,7 +453,7 @@ namespace LAsOsuBeatmapParser.Analysis
                     {
                         double offset = baseCorners[idx] - startTime;
                         double falloffContribution = falloff * Math.Pow(offset, 2);
-                        double value = baseContribution - falloffContribution;
+                        double value = base_contribution - falloffContribution;
                         double clamped = Math.Max(value, 0);
                         usage[note.Column][idx] += clamped;
                     }
@@ -462,7 +462,7 @@ namespace LAsOsuBeatmapParser.Analysis
                     {
                         double offset = baseCorners[idx] - endTime;
                         double falloffContribution = falloff * Math.Pow(offset, 2);
-                        double value = baseContribution - falloffContribution;
+                        double value = base_contribution - falloffContribution;
                         double clamped = Math.Max(value, 0);
                         usage[note.Column][idx] += clamped;
                     }
@@ -558,14 +558,14 @@ namespace LAsOsuBeatmapParser.Analysis
 
             private static (double[][] deltaKs, double[] jBar) ComputeJBar(int keyCount, int totalTime, double x, List<NoteData>[] notesByColumn, double[] baseCorners)
             {
-                const double defaultDelta = 1e9;
+                const double default_delta = 1e9;
 
                 double[][] deltaKs = new double[keyCount][];
                 double[][] jKs = new double[keyCount][];
 
                 Parallel.For(0, keyCount, k =>
                 {
-                    deltaKs[k] = Enumerable.Repeat(defaultDelta, baseCorners.Length).ToArray();
+                    deltaKs[k] = Enumerable.Repeat(default_delta, baseCorners.Length).ToArray();
                     jKs[k] = new double[baseCorners.Length];
 
                     List<NoteData> columnNotes = notesByColumn[k];
@@ -641,7 +641,7 @@ namespace LAsOsuBeatmapParser.Analysis
                 }
 
                 // Parallel.For(0, keyCount + 1, k =>
-                Parallel.For(0, keyCount + 1, (int k) =>
+                Parallel.For(0, keyCount + 1, k =>
                 {
                     var pair = new List<NoteData>();
 
@@ -655,7 +655,7 @@ namespace LAsOsuBeatmapParser.Analysis
                         pair.AddRange(notesByColumn[k]);
                     }
 
-                    pair.Sort(NoteComparer);
+                    pair.Sort(note_comparer);
                     if (pair.Count < 2) return;
 
                     for (int i = 1; i < pair.Count; i++)
@@ -1347,7 +1347,7 @@ namespace LAsOsuBeatmapParser.Analysis
                 return headCompare != 0 ? headCompare : a.Column.CompareTo(b.Column);
             }
 
-            private static readonly Comparison<NoteData> NoteComparer = CompareNotes;
+            private static readonly Comparison<NoteData> note_comparer = CompareNotes;
 
             private static void AddToMap(Dictionary<int, double> map, int key, double value)
             {

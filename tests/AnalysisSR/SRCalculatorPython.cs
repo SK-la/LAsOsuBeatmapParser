@@ -6,12 +6,12 @@ using System.Diagnostics;
 using System.IO;
 using System.Text.RegularExpressions;
 
-namespace LAsOsuBeatmapParser.Analysis
+namespace LAsOsuBeatmapParser.Tests.AnalysisSR
 {
     public static class SRCalculatorPython
     {
         // Python可执行文件路径 - 动态查找以适应不同环境
-        private static string PythonExecutable
+        private static string pythonExecutable
         {
             get => GetPythonExecutable();
         }
@@ -21,7 +21,7 @@ namespace LAsOsuBeatmapParser.Analysis
             // 尝试多个可能的Python命令
             string[] candidates = { "python", "python3", "py" };
 
-            foreach (var cmd in candidates)
+            foreach (string cmd in candidates)
             {
                 try
                 {
@@ -47,7 +47,7 @@ namespace LAsOsuBeatmapParser.Analysis
         }
 
         // Python脚本路径 - 基于项目根目录
-        private static string PythonScriptPath
+        private static string pythonScriptPath
         {
             get => Path.Combine(GetProjectRoot(), "Star-Rating-Rebirth", "srcalc-script.py");
         }
@@ -81,13 +81,13 @@ namespace LAsOsuBeatmapParser.Analysis
             try
             {
                 // 检查Python脚本是否存在
-                if (!File.Exists(PythonScriptPath))
+                if (!File.Exists(pythonScriptPath))
                 {
-                    Console.WriteLine($"警告：Python脚本不存在: {PythonScriptPath}");
+                    Console.WriteLine($"警告：Python脚本不存在: {pythonScriptPath}");
                     return null;
                 }
 
-                Console.WriteLine($"Python script exists: {PythonScriptPath}");
+                Console.WriteLine($"Python script exists: {pythonScriptPath}");
 
                 // 创建临时目录
                 string tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
@@ -103,13 +103,13 @@ namespace LAsOsuBeatmapParser.Analysis
                     // 创建进程启动信息
                     var startInfo = new ProcessStartInfo
                     {
-                        FileName = PythonExecutable,
-                        Arguments = $"\"{PythonScriptPath}\" \"{tempDir}\" --single-run",
+                        FileName = pythonExecutable,
+                        Arguments = $"\"{pythonScriptPath}\" \"{tempDir}\" --single-run",
                         UseShellExecute = false,
                         RedirectStandardOutput = true,
                         RedirectStandardError = true,
                         CreateNoWindow = true,
-                        WorkingDirectory = Path.GetDirectoryName(PythonScriptPath) ?? ""
+                        WorkingDirectory = Path.GetDirectoryName(pythonScriptPath) ?? ""
                     };
 
                     // 启动Python进程
