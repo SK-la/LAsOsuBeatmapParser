@@ -1,7 +1,7 @@
 # publish-nuget.ps1
 # Run directly by right-clicking, no parameters needed. Modify $Version for release or beta.
 
-$Version = "1.0.3-beta"   # For release, change to e.g. "2.0.0", for beta "3.0.0-beta"
+$Version = "1.0.4"   # For release, change to e.g. "2.0.0", for beta "3.0.0-beta"
 $ApiKey = $env:NUGET_API_KEY
 
 if (-not $ApiKey) {
