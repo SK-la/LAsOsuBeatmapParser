@@ -2,7 +2,11 @@ pub mod sr;
 pub mod note;
 pub mod cross_matrix;
 pub mod parser;
+pub mod ffi;
 pub mod math;
+
+#[cfg(test)]
+mod ffi_tests;
 
 #[cfg(debug_assertions)]
 #[macro_export]
@@ -47,7 +51,8 @@ pub extern "C" fn calculate_sr_from_osu_file(path_ptr: *const c_char, len: usize
 
     debug_log!("Rust: Received path: {}", path_str);
 
-    let file = match std::fs::File::open(path_str) {
+    // Presence check only: the parser opens the file itself, so the handle here is not used further.
+    let _file = match std::fs::File::open(path_str) {
         Ok(f) => f,
         Err(e) => {
             eprintln!("[SR][ERROR] 文件打开失败: {}, 错误: {}", path_str, e);
@@ -73,8 +78,7 @@ pub extern "C" fn calculate_sr_from_osu_file(path_ptr: *const c_char, len: usize
     }
 
     debug_log!("Rust: Calculating SR for {}", path_str);
-    match std::panic::catch_unwind(|| SRCalculator::calculate_sr_from_parsed_data(&data)) {
-        Ok(Ok(sr)) => {
+    match std::panic::catch_unwind(|| SRCalculator::calculate_sr_from_parsed_data(&data)) {        Ok(Ok(sr)) => {
             debug_log!("Rust: Calculated SR: {}", sr);
             sr
         },
