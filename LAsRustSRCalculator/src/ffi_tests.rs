@@ -29,6 +29,25 @@ fn hold_chart(keys: i32, rows: i32) -> Vec<EzSrNote> {
     notes
 }
 
+/// Dense chorded chart: exercises the high-end rescale, which only engages above the threshold.
+fn dense_chart(keys: i32, rows: i32) -> Vec<EzSrNote> {
+    let mut notes = Vec::new();
+    let mut time = 500;
+    let mut seed: i64 = 12_345;
+
+    for _row in 0..rows {
+        for _note in 0..keys {
+            seed = seed.wrapping_mul(1_103_515_245).wrapping_add(12_345);
+            let col = (seed >> 16).rem_euclid(keys as i64) as i32;
+            notes.push(EzSrNote { col, head: time, tail: time + 120 });
+        }
+
+        time += 90;
+    }
+
+    notes
+}
+
 fn call(notes: &[EzSrNote], keys: i32, od: f64) -> (i32, EzSrResult) {
     let cross = CrossMatrixProvider::get_matrix(keys).expect("supported key count");
     let mut out = EzSrResult { sr: 0.0, components: [0.0; COMPONENT_COUNT], component_count: 0 };
@@ -246,6 +265,99 @@ fn tunables_change_the_rating() {
         ez.sr,
         legacy.sr
     );
+}
+
+/// The SR Adjust mod exposes both coefficients. Each must move the rating on its own, in the direction the mod's
+/// usage implies: a higher threshold compresses less of the rating, a higher LN multiplier rates holds harder.
+#[test]
+fn each_coefficient_is_independent_and_monotonic() {
+    // Must rate above the highest threshold the mod exposes, otherwise the rescale never engages and the
+    // threshold assertion would be vacuous.
+    let notes = dense_chart(4, 900);
+    let cross = CrossMatrixProvider::get_matrix(4).unwrap();
+
+    let rate_with = |threshold: f64, ln: f64| -> f64 {
+        let mut out = EzSrResult { sr: 0.0, components: [0.0; COMPONENT_COUNT], component_count: 0 };
+        let code = unsafe {
+            ez_sr_calculate(
+                notes.as_ptr(), notes.len(), 4, 8.0, cross.as_ptr(),
+                EzSrConfig { rescale_threshold: threshold, ln_multiplier: ln }, &mut out,
+            )
+        };
+        assert_eq!(code, EZ_SR_OK);
+        out.sr
+    };
+
+    let threshold_low = rate_with(5.0, 5.5);
+    let threshold_high = rate_with(10.0, 5.5);
+
+    assert!(
+        threshold_low > 10.0,
+        "fixture rates {threshold_low}, below the highest threshold; the rescale would not be exercised"
+    );
+    assert!(
+        threshold_high > threshold_low,
+        "raising the threshold must raise the rating: {threshold_low} -> {threshold_high}"
+    );
+
+    // LN multiplier only: the threshold is held at a value below the raw rating, so both calls rescale the same way.
+    let ln_low = rate_with(5.0, 2.0);
+    let ln_high = rate_with(5.0, 8.0);
+    assert!(
+        ln_high > ln_low,
+        "raising the LN multiplier must raise the rating: {ln_low} -> {ln_high}"
+    );
+
+    // The two are separate inputs: equal moves must not be interchangeable.
+    assert!(
+        (threshold_high - threshold_low - (ln_high - ln_low)).abs() > 1e-9,
+        "the two coefficients should not be interchangeable"
+    );
+}
+
+/// The range the mod can produce, so a coefficient is never silently clamped away.
+#[test]
+fn mod_range_is_honoured() {
+    let notes = dense_chart(7, 600);
+    let cross = CrossMatrixProvider::get_matrix(7).unwrap();
+
+    for threshold in [5.0, 6.0, 7.0, 8.0, 9.0, 10.0] {
+        for ln in [2.0, 4.5, 5.5, 6.0, 8.0] {
+            let mut out = EzSrResult { sr: 0.0, components: [0.0; COMPONENT_COUNT], component_count: 0 };
+            let code = unsafe {
+                ez_sr_calculate(
+                    notes.as_ptr(), notes.len(), 7, 8.0, cross.as_ptr(),
+                    EzSrConfig { rescale_threshold: threshold, ln_multiplier: ln }, &mut out,
+                )
+            };
+
+            assert_eq!(code, EZ_SR_OK, "threshold={threshold} ln={ln} returned {code}");
+            assert!(out.sr.is_finite() && out.sr > 0.0, "threshold={threshold} ln={ln} produced {}", out.sr);
+        }
+    }
+}
+
+/// A non-finite or non-positive coefficient falls back to the host's default rather than poisoning the result.
+#[test]
+fn invalid_coefficients_fall_back() {
+    let notes = stream(4, 64);
+    let cross = CrossMatrixProvider::get_matrix(4).unwrap();
+
+    let rate_with = |config: EzSrConfig| -> f64 {
+        let mut out = EzSrResult { sr: 0.0, components: [0.0; COMPONENT_COUNT], component_count: 0 };
+        let code = unsafe {
+            ez_sr_calculate(notes.as_ptr(), notes.len(), 4, 8.0, cross.as_ptr(), config, &mut out)
+        };
+        assert_eq!(code, EZ_SR_OK);
+        out.sr
+    };
+
+    let baseline = rate_with(EzSrConfig { rescale_threshold: 8.0, ln_multiplier: 5.5 });
+    let nan_ln = rate_with(EzSrConfig { rescale_threshold: 8.0, ln_multiplier: f64::NAN });
+    let zero_threshold = rate_with(EzSrConfig { rescale_threshold: 0.0, ln_multiplier: 5.5 });
+
+    assert_eq!(baseline.to_bits(), nan_ln.to_bits());
+    assert_eq!(baseline.to_bits(), zero_threshold.to_bits());
 }
 
 #[test]
