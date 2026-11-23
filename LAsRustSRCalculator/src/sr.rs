@@ -21,10 +21,16 @@ pub struct SrConfig {
 
 impl SrConfig {
     /// The values Ez2Lazer produces and persists (C# `RescaleHighThreshold` / `LnIntegralMultiplier`).
-    pub const EZ_DEFAULT: SrConfig = SrConfig { rescale_threshold: 8.0, ln_multiplier: 5.5 };
+    pub const EZ_DEFAULT: SrConfig = SrConfig {
+        rescale_threshold: 8.0,
+        ln_multiplier: 5.5,
+    };
 
     /// The original defaults of this port, kept for the file-path entry so its behaviour does not change.
-    pub const LEGACY_DEFAULT: SrConfig = SrConfig { rescale_threshold: 9.0, ln_multiplier: 6.0 };
+    pub const LEGACY_DEFAULT: SrConfig = SrConfig {
+        rescale_threshold: 9.0,
+        ln_multiplier: 6.0,
+    };
 }
 
 #[derive(Clone, Copy)]
@@ -44,7 +50,14 @@ impl SRCalculator {
         let note_seq = build_note_seq(data);
         let cross = CrossMatrixProvider::get_matrix(data.column_count)
             .ok_or_else(|| format!("No cross matrix for {}k", data.column_count))?;
-        Ok(Self::calculate_with_components(note_seq, data.column_count, data.od, cross, SrConfig::LEGACY_DEFAULT)?.sr)
+        Ok(Self::calculate_with_components(
+            note_seq,
+            data.column_count,
+            data.od,
+            cross,
+            SrConfig::LEGACY_DEFAULT,
+        )?
+        .sr)
     }
 
     /// Star rating plus the six-component breakdown.
@@ -65,10 +78,16 @@ impl SRCalculator {
         let expected_cross = (k + 1) as usize;
 
         if cross.len() < expected_cross {
-            return Err(format!("Cross matrix for {k}k has {} values, expected at least {expected_cross}", cross.len()));
+            return Err(format!(
+                "Cross matrix for {k}k has {} values, expected at least {expected_cross}",
+                cross.len()
+            ));
         }
 
-        let zero = SrOutput { sr: 0.0, components: [0.0; COMPONENT_COUNT] };
+        let zero = SrOutput {
+            sr: 0.0,
+            components: [0.0; COMPONENT_COUNT],
+        };
 
         if note_seq.is_empty() {
             return Ok(zero);
@@ -81,17 +100,28 @@ impl SRCalculator {
         let x = 0.3 * ((64.5 - (od * 3.0).ceil()) / 500.0).sqrt();
         let x = x.min(0.6 * (x - 0.09) + 0.09);
 
-        // Group notes by column
+        // Group notes by column while retaining each note's per-column index. This must not be reconstructed by
+        // matching head timestamps later: duplicate heads can have distinct direct successors.
         let mut note_seq_by_column: Vec<Vec<(i32, i32, i32)>> = vec![vec![]; k as usize];
+        let mut column_indices = vec![0usize; k as usize];
+        let mut tail_seq = Vec::new();
         for &note in &note_seq {
             let col = note.0.max(0).min((k - 1) as i32) as usize;
+            let column_index = column_indices[col];
+            column_indices[col] += 1;
             note_seq_by_column[col].push(note);
+            if note.2 >= 0 {
+                tail_seq.push((note, column_index));
+            }
         }
 
         // LN sequences
-        let ln_seq: Vec<(i32, i32, i32)> = note_seq.iter().filter(|&&(_, _, t)| t >= 0).cloned().collect();
-        let mut tail_seq = ln_seq.clone();
-        tail_seq.sort_by(|a, b| a.2.cmp(&b.2)); // Sort by tail time
+        let ln_seq: Vec<(i32, i32, i32)> = note_seq
+            .iter()
+            .filter(|&&(_, _, t)| t >= 0)
+            .cloned()
+            .collect();
+        tail_seq.sort_by(|(a, _), (b, _)| a.2.cmp(&b.2)); // Stable tail-time order, like C# OrderBy.
 
         // Calculate T
         let t = note_seq.iter().map(|&(_, h, t)| h.max(t)).max().unwrap() + 1;
@@ -102,7 +132,6 @@ impl SRCalculator {
         let key_usage = Self::get_key_usage(k, t, &note_seq, &base_corners);
         let active_columns = Self::derive_active_columns(&key_usage);
 
-
         let key_usage_400 = Self::get_key_usage_400(k, t, &note_seq, &base_corners);
         let anchor = Self::compute_anchor(k, &key_usage_400, &base_corners);
 
@@ -111,15 +140,32 @@ impl SRCalculator {
 
         // Compute Xbar. The cross matrix is the caller's (or the shared table's), not a copy local to this
         // function: it must be the same table the host validated.
-        let xbar = Self::compute_xbar(k, x, &note_seq_by_column, &active_columns, &base_corners, cross);
+        let xbar = Self::compute_xbar(
+            k,
+            x,
+            &note_seq_by_column,
+            &active_columns,
+            &base_corners,
+            cross,
+        );
 
         // Compute Pbar. One pass produces all three variants the result needs: the plain anchored curve (the
         // rating), the curve without hold contribution, and the curve with holds but a neutral anchor (both
         // feed the component breakdown).
-        let ln_rep = if !ln_seq.is_empty() { Some(Self::build_ln_representation(&ln_seq, t)) } else { None };
+        let ln_rep = if !ln_seq.is_empty() {
+            Some(Self::build_ln_representation(&ln_seq, t))
+        } else {
+            None
+        };
 
         let (burst_base, ln_usage_base, pbar_base) = Self::compute_pbar_variants(
-            x, &note_seq, ln_rep.as_ref(), &anchor, &base_corners, config.ln_multiplier);
+            x,
+            &note_seq,
+            ln_rep.as_ref(),
+            &anchor,
+            &base_corners,
+            config.ln_multiplier,
+        );
 
         let burst_bar = Self::interp_values(&all_corners, &base_corners, &burst_base);
         let ln_usage_bar = Self::interp_values(&all_corners, &base_corners, &ln_usage_base);
@@ -177,7 +223,8 @@ impl SRCalculator {
             corners_base.insert(s - 499);
             corners_base.insert(s + 1);
         }
-        let mut corners_base_vec: Vec<f64> = corners_base.into_iter()
+        let mut corners_base_vec: Vec<f64> = corners_base
+            .into_iter()
             .filter(|&s| s >= 0 && s <= t)
             .map(|s| s as f64)
             .collect();
@@ -197,7 +244,8 @@ impl SRCalculator {
             corners_a.insert(s + 1000);
             corners_a.insert(s - 1000);
         }
-        let mut a_corners: Vec<f64> = corners_a.into_iter()
+        let mut a_corners: Vec<f64> = corners_a
+            .into_iter()
             .filter(|&s| s >= 0 && s <= t)
             .map(|s| s as f64)
             .collect();
@@ -216,7 +264,10 @@ impl SRCalculator {
         (all_corners, corners_base_vec, a_corners)
     }
 
-    fn build_ln_representation(ln_seq: &[(i32, i32, i32)], t: i32) -> (Vec<f64>, Vec<f64>, Vec<f64>) {
+    fn build_ln_representation(
+        ln_seq: &[(i32, i32, i32)],
+        t: i32,
+    ) -> (Vec<f64>, Vec<f64>, Vec<f64>) {
         let mut changes = vec![];
         for &(_k, h, tail) in ln_seq {
             let t0 = (h + 60).min(tail) as f64;
@@ -266,11 +317,20 @@ impl SRCalculator {
         active
     }
 
-    fn get_key_usage(k: i32, total_time: i32, note_seq: &[(i32, i32, i32)], base_corners: &[f64]) -> Vec<Vec<bool>> {
+    fn get_key_usage(
+        k: i32,
+        total_time: i32,
+        note_seq: &[(i32, i32, i32)],
+        base_corners: &[f64],
+    ) -> Vec<Vec<bool>> {
         let mut key_usage = vec![vec![false; base_corners.len()]; k as usize];
         for &(col, h, tail) in note_seq {
             let start = (h - 150).max(0) as f64;
-            let end = if tail >= 0 { ((tail + 150) as f64).min(total_time as f64 - 1.0) } else { ((h + 150) as f64).min(total_time as f64 - 1.0) };
+            let end = if tail >= 0 {
+                ((tail + 150) as f64).min(total_time as f64 - 1.0)
+            } else {
+                ((h + 150) as f64).min(total_time as f64 - 1.0)
+            };
             let left = Self::bisect_left(base_corners, start);
             let right = Self::bisect_left(base_corners, end);
             for idx in left..right {
@@ -280,7 +340,13 @@ impl SRCalculator {
         key_usage
     }
 
-    fn add_falloff_contribution(usage: &mut [Vec<f64>], col: usize, base_corners: &[f64], range: std::ops::Range<usize>, ref_time: f64) {
+    fn add_falloff_contribution(
+        usage: &mut [Vec<f64>],
+        col: usize,
+        base_corners: &[f64],
+        range: std::ops::Range<usize>,
+        ref_time: f64,
+    ) {
         for idx in range {
             let offset = base_corners[idx] - ref_time;
             let falloff_contribution = 3.75 / (400.0 * 400.0) * offset * offset;
@@ -290,7 +356,12 @@ impl SRCalculator {
         }
     }
 
-    fn get_key_usage_400(k: i32, _total_time: i32, note_seq: &[(i32, i32, i32)], base_corners: &[f64]) -> Vec<Vec<f64>> {
+    fn get_key_usage_400(
+        k: i32,
+        _total_time: i32,
+        note_seq: &[(i32, i32, i32)],
+        base_corners: &[f64],
+    ) -> Vec<Vec<f64>> {
         let mut usage = vec![vec![0.0; base_corners.len()]; k as usize];
         for &(col, h, tail) in note_seq {
             let start_time = h.max(0) as f64;
@@ -313,8 +384,20 @@ impl SRCalculator {
                 usage[col as usize][idx] += contribution;
             }
 
-            Self::add_falloff_contribution(&mut usage, col as usize, base_corners, left400_idx..left_idx, start_time);
-            Self::add_falloff_contribution(&mut usage, col as usize, base_corners, right_idx..right400_idx, end_time);
+            Self::add_falloff_contribution(
+                &mut usage,
+                col as usize,
+                base_corners,
+                left400_idx..left_idx,
+                start_time,
+            );
+            Self::add_falloff_contribution(
+                &mut usage,
+                col as usize,
+                base_corners,
+                right_idx..right400_idx,
+                end_time,
+            );
         }
         usage
     }
@@ -347,7 +430,12 @@ impl SRCalculator {
         anchor
     }
 
-    fn compute_jbar(k: i32, note_seq_by_column: &[Vec<(i32, i32, i32)>], base_corners: &[f64], x: f64) -> (Vec<Vec<f64>>, Vec<f64>) {
+    fn compute_jbar(
+        k: i32,
+        note_seq_by_column: &[Vec<(i32, i32, i32)>],
+        base_corners: &[f64],
+        x: f64,
+    ) -> (Vec<Vec<f64>>, Vec<f64>) {
         let mut j_ks = vec![vec![0.0; base_corners.len()]; k as usize];
         let mut delta_ks = vec![vec![1e9; base_corners.len()]; k as usize];
 
@@ -358,7 +446,9 @@ impl SRCalculator {
                 let (_, h2, _) = notes[i + 1];
                 let delta = 0.001 * (h2 - h1) as f64;
 
-                if delta < 1e-9 { continue; }
+                if delta < 1e-9 {
+                    continue;
+                }
 
                 let x_pow_025 = x.powf(0.25);
                 let lambda1_x = 0.11 * x_pow_025;
@@ -381,7 +471,8 @@ impl SRCalculator {
         // Smooth each column's J_ks
         let mut jbar_ks = vec![vec![0.0; base_corners.len()]; k as usize];
         for col in 0..k as usize {
-            jbar_ks[col] = Self::smooth_on_corners(&j_ks[col], base_corners, 500.0, 0.001, SmoothMode::Sum);
+            jbar_ks[col] =
+                Self::smooth_on_corners(&j_ks[col], base_corners, 500.0, 0.001, SmoothMode::Sum);
         }
 
         // Aggregate across columns
@@ -396,14 +487,25 @@ impl SRCalculator {
             }
             let weighted_sum: f64 = vals.iter().zip(weights.iter()).map(|(v, w)| v * w).sum();
             let total_weight: f64 = weights.iter().sum();
-            let combined = if total_weight <= 0.0 { 0.0 } else { weighted_sum / total_weight };
+            let combined = if total_weight <= 0.0 {
+                0.0
+            } else {
+                weighted_sum / total_weight
+            };
             jbar[i] = combined.max(0.0).powf(0.2);
         }
 
         (delta_ks, jbar)
     }
 
-    fn compute_xbar(k: i32, x: f64, note_seq_by_column: &[Vec<(i32, i32, i32)>], active_columns: &[Vec<usize>], base_corners: &[f64], cross: &[f64]) -> Vec<f64> {
+    fn compute_xbar(
+        k: i32,
+        x: f64,
+        note_seq_by_column: &[Vec<(i32, i32, i32)>],
+        active_columns: &[Vec<usize>],
+        base_corners: &[f64],
+        cross: &[f64],
+    ) -> Vec<f64> {
         // `cross` holds k + 1 coefficients for this key mode; the caller validated its length.
         let matrix = cross;
 
@@ -423,8 +525,16 @@ impl SRCalculator {
             } else {
                 let left_col = col - 1;
                 let right_col = col;
-                let mut left_notes = if left_col < note_seq_by_column.len() { note_seq_by_column[left_col].clone() } else { vec![] };
-                let mut right_notes = if right_col < note_seq_by_column.len() { note_seq_by_column[right_col].clone() } else { vec![] };
+                let mut left_notes = if left_col < note_seq_by_column.len() {
+                    note_seq_by_column[left_col].clone()
+                } else {
+                    vec![]
+                };
+                let mut right_notes = if right_col < note_seq_by_column.len() {
+                    note_seq_by_column[right_col].clone()
+                } else {
+                    vec![]
+                };
                 left_notes.append(&mut right_notes);
                 left_notes.sort_by(|a, b| a.1.cmp(&b.1));
                 notes_in_pair = left_notes;
@@ -443,15 +553,22 @@ impl SRCalculator {
                 let idx_start = left_idx.min(active_columns.len().saturating_sub(1));
                 let idx_end = right_idx.min(active_columns.len().saturating_sub(1));
 
-                let condition1 = if col == 0 { true } else { !active_columns[idx_start].contains(&(col - 1)) && !active_columns[idx_end].contains(&(col - 1)) };
-                let condition2 = !active_columns[idx_start].contains(&col) && !active_columns[idx_end].contains(&col);
+                let condition1 = if col == 0 {
+                    true
+                } else {
+                    !active_columns[idx_start].contains(&(col - 1))
+                        && !active_columns[idx_end].contains(&(col - 1))
+                };
+                let condition2 = !active_columns[idx_start].contains(&col)
+                    && !active_columns[idx_end].contains(&col);
                 if condition1 || condition2 {
                     val *= 1.0 - matrix[col];
                 }
 
                 for j in left_idx..right_idx {
                     x_ks[col][j] = val;
-                    fast_cross[col][j] = (0.4 * (delta.max(0.06).max(0.75 * x)).powf(-2.0) - 80.0).max(0.0);
+                    fast_cross[col][j] =
+                        (0.4 * (delta.max(0.06).max(0.75 * x)).powf(-2.0) - 80.0).max(0.0);
                 }
             }
         }
@@ -587,7 +704,11 @@ impl SRCalculator {
                 p_burst[j] += inc_burst;
                 p_ln[j] += inc_ln;
 
-                let anchored_value = if j < anchor.len() { inc_ln * anchor[j] } else { inc_ln };
+                let anchored_value = if j < anchor.len() {
+                    inc_ln * anchor[j]
+                } else {
+                    inc_ln
+                };
                 p_anchored[j] += anchored_value.min(limit_ln);
             }
         }
@@ -599,7 +720,13 @@ impl SRCalculator {
         )
     }
 
-    fn compute_abar(_k: i32, delta_ks: &[Vec<f64>], active_columns: &[Vec<usize>], a_corners: &[f64], base_corners: &[f64]) -> Vec<f64> {
+    fn compute_abar(
+        _k: i32,
+        delta_ks: &[Vec<f64>],
+        active_columns: &[Vec<usize>],
+        a_corners: &[f64],
+        base_corners: &[f64],
+    ) -> Vec<f64> {
         let mut a_step = vec![1.0; a_corners.len()];
         for i in 0..a_corners.len() {
             let s = a_corners[i];
@@ -631,15 +758,21 @@ impl SRCalculator {
         Self::smooth_on_corners(&a_step, a_corners, 250.0, 0.0, SmoothMode::Average)
     }
 
-    fn compute_rbar(x: f64, note_seq_by_column: &[Vec<(i32, i32, i32)>], tail_seq: &[(i32, i32, i32)], base_corners: &[f64]) -> Vec<f64> {
+    fn compute_rbar(
+        x: f64,
+        note_seq_by_column: &[Vec<(i32, i32, i32)>],
+        tail_seq: &[(SrNote, usize)],
+        base_corners: &[f64],
+    ) -> Vec<f64> {
         let mut i_vals = vec![0.0; tail_seq.len()];
 
         for i in 0..tail_seq.len() {
-            let (k, h_i, t_i) = tail_seq[i];
-            let column_notes = if (k as usize) < note_seq_by_column.len() { &note_seq_by_column[k as usize] } else { &vec![] };
-
-            let index = column_notes.iter().position(|&n| n.1 == h_i).unwrap_or(0);
-            let next_note_time = if index + 1 < column_notes.len() { column_notes[index + 1].1 } else { 1000000000 };
+            let ((column, h_i, t_i), column_index) = tail_seq[i];
+            let column_notes = &note_seq_by_column[column as usize];
+            let next_note_time = column_notes
+                .get(column_index + 1)
+                .map(|note| note.1)
+                .unwrap_or(1_000_000_000);
 
             let i_h = 0.001 * ((t_i - h_i - 80) as f64).abs() / x;
             let i_t = 0.001 * ((next_note_time - t_i - 80) as f64).abs() / x;
@@ -649,8 +782,8 @@ impl SRCalculator {
         let mut r = vec![0.0; base_corners.len()];
 
         for i in 0..tail_seq.len().saturating_sub(1) {
-            let (_, _, t_i) = tail_seq[i];
-            let (_, _, t_next) = tail_seq[i + 1];
+            let (_, _, t_i) = tail_seq[i].0;
+            let (_, _, t_next) = tail_seq[i + 1].0;
             let delta_r = 0.001 * (t_next - t_i) as f64;
             let r_val = 0.08 * delta_r.powf(-0.5) / x * (1.0 + 0.8 * (i_vals[i] + i_vals[i + 1]));
 
@@ -667,7 +800,12 @@ impl SRCalculator {
         Self::smooth_on_corners(&r, base_corners, 500.0, 0.001, SmoothMode::Sum)
     }
 
-    fn compute_c_and_ks(k: i32, note_seq: &[(i32, i32, i32)], key_usage: &[Vec<bool>], base_corners: &[f64]) -> (Vec<f64>, Vec<f64>) {
+    fn compute_c_and_ks(
+        k: i32,
+        note_seq: &[(i32, i32, i32)],
+        key_usage: &[Vec<bool>],
+        base_corners: &[f64],
+    ) -> (Vec<f64>, Vec<f64>) {
         let mut note_times: Vec<f64> = note_seq.iter().map(|&(_, h, _)| h as f64).collect();
         note_times.sort_by(|a, b| a.partial_cmp(b).unwrap());
 
@@ -695,26 +833,32 @@ impl SRCalculator {
     }
 
     fn interp_values(new_x: &[f64], old_x: &[f64], old_vals: &[f64]) -> Vec<f64> {
-        new_x.iter().map(|&x| {
-            if x <= old_x[0] {
-                old_vals[0]
-            } else if x >= old_x[old_x.len() - 1] {
-                old_vals[old_vals.len() - 1]
-            } else {
-                let idx = old_x.partition_point(|&val| val < x) - 1;
-                let frac = (x - old_x[idx]) / (old_x[idx + 1] - old_x[idx]);
-                old_vals[idx] + frac * (old_vals[idx + 1] - old_vals[idx])
-            }
-        }).collect()
+        new_x
+            .iter()
+            .map(|&x| {
+                if x <= old_x[0] {
+                    old_vals[0]
+                } else if x >= old_x[old_x.len() - 1] {
+                    old_vals[old_vals.len() - 1]
+                } else {
+                    let idx = old_x.partition_point(|&val| val < x) - 1;
+                    let frac = (x - old_x[idx]) / (old_x[idx + 1] - old_x[idx]);
+                    old_vals[idx] + frac * (old_vals[idx + 1] - old_vals[idx])
+                }
+            })
+            .collect()
     }
 
     fn step_interp(new_x: &[f64], old_x: &[f64], old_vals: &[f64]) -> Vec<f64> {
         // Upper bound, not lower bound: at an exact corner the reference reads that corner's step, and the corners
         // are shared between the two arrays by construction.
-        new_x.iter().map(|&x| {
-            let idx = old_x.partition_point(|&val| val <= x).saturating_sub(1);
-            old_vals[idx.min(old_vals.len() - 1)]
-        }).collect()
+        new_x
+            .iter()
+            .map(|&x| {
+                let idx = old_x.partition_point(|&val| val <= x).saturating_sub(1);
+                old_vals[idx.min(old_vals.len() - 1)]
+            })
+            .collect()
     }
 
     fn cumulative_sum(x: &[f64], f: &[f64]) -> Vec<f64> {
@@ -736,14 +880,21 @@ impl SRCalculator {
         f_cum[i] + f[i] * (q - x[i])
     }
 
-    fn smooth_on_corners(f: &[f64], x: &[f64], window: f64, scale: f64, mode: SmoothMode) -> Vec<f64> {
+    fn smooth_on_corners(
+        f: &[f64],
+        x: &[f64],
+        window: f64,
+        scale: f64,
+        mode: SmoothMode,
+    ) -> Vec<f64> {
         let f_cum = Self::cumulative_sum(x, f);
         let mut g = vec![0.0; f.len()];
         for i in 0..x.len() {
             let s = x[i];
             let a = (s - window).max(x[0]);
             let b = (s + window).min(x[x.len() - 1]);
-            let integral = Self::query_cumsum(b, x, &f_cum, f) - Self::query_cumsum(a, x, &f_cum, f);
+            let integral =
+                Self::query_cumsum(b, x, &f_cum, f) - Self::query_cumsum(a, x, &f_cum, f);
             if mode == SmoothMode::Average {
                 g[i] = integral / (b - a).max(1e-9);
             } else {
@@ -772,7 +923,8 @@ impl SRCalculator {
         let mut gaps = vec![0.0; all_corners.len()];
         if all_corners.len() > 1 {
             gaps[0] = (all_corners[1] - all_corners[0]) / 2.0;
-            gaps[all_corners.len() - 1] = (all_corners[all_corners.len() - 1] - all_corners[all_corners.len() - 2]) / 2.0;
+            gaps[all_corners.len() - 1] =
+                (all_corners[all_corners.len() - 1] - all_corners[all_corners.len() - 2]) / 2.0;
             for i in 1..all_corners.len() - 1 {
                 gaps[i] = (all_corners[i + 1] - all_corners[i - 1]) / 2.0;
             }
@@ -809,16 +961,30 @@ impl SRCalculator {
             let anchored_burst_term2 = Self::burst_term(pbar[i], 0.0, abar[i], c_arr[i]);
             let actual_term2 = Self::burst_term(pbar[i], rbar[i], abar[i], c_arr[i]);
 
-            let without_burst_branch = Self::local_difficulty(xbar[i], abar[i], ks_arr[i], actual_term1, 0.0);
-            let with_burst_only = Self::local_difficulty(xbar[i], abar[i], ks_arr[i], actual_term1, burst_only_term2);
-            let with_ln_usage = Self::local_difficulty(xbar[i], abar[i], ks_arr[i], actual_term1, ln_usage_term2);
-            let with_anchor = Self::local_difficulty(xbar[i], abar[i], ks_arr[i], actual_term1, anchored_burst_term2);
-            let actual_difficulty = Self::local_difficulty(xbar[i], abar[i], ks_arr[i], actual_term1, actual_term2);
+            let without_burst_branch =
+                Self::local_difficulty(xbar[i], abar[i], ks_arr[i], actual_term1, 0.0);
+            let with_burst_only =
+                Self::local_difficulty(xbar[i], abar[i], ks_arr[i], actual_term1, burst_only_term2);
+            let with_ln_usage =
+                Self::local_difficulty(xbar[i], abar[i], ks_arr[i], actual_term1, ln_usage_term2);
+            let with_anchor = Self::local_difficulty(
+                xbar[i],
+                abar[i],
+                ks_arr[i],
+                actual_term1,
+                anchored_burst_term2,
+            );
+            let actual_difficulty =
+                Self::local_difficulty(xbar[i], abar[i], ks_arr[i], actual_term1, actual_term2);
 
             d_all[i] = actual_difficulty;
 
-            bracket_contribution[i] = (actual_difficulty - Self::local_difficulty(0.0, abar[i], ks_arr[i], actual_term1, actual_term2)).max(0.0);
-            jack_contribution[i] = (actual_difficulty - Self::local_difficulty(xbar[i], abar[i], ks_arr[i], 0.0, actual_term2)).max(0.0);
+            bracket_contribution[i] = (actual_difficulty
+                - Self::local_difficulty(0.0, abar[i], ks_arr[i], actual_term1, actual_term2))
+            .max(0.0);
+            jack_contribution[i] = (actual_difficulty
+                - Self::local_difficulty(xbar[i], abar[i], ks_arr[i], 0.0, actual_term2))
+            .max(0.0);
             burst_contribution[i] = (with_burst_only - without_burst_branch).max(0.0);
             ln_usage_contribution[i] = (with_ln_usage - with_burst_only).max(0.0);
             anchor_contribution[i] = (with_anchor - with_ln_usage).max(0.0);
@@ -844,15 +1010,69 @@ impl SRCalculator {
             anchor_alloc[i] = anchor_contribution[i] * scale;
         }
 
-        let sr = Self::finalise_difficulty(&d_all, &effective_weights, note_seq, ln_seq, config.rescale_threshold);
+        let sr = Self::finalise_difficulty(
+            &d_all,
+            &effective_weights,
+            note_seq,
+            ln_seq,
+            config.rescale_threshold,
+        );
 
         let mut components = [0.0; COMPONENT_COUNT];
-        components[0] = Self::contribution_star(&bracket_alloc, &d_all, &effective_weights, note_seq, ln_seq, sr, config.rescale_threshold);
-        components[1] = Self::contribution_star(&jack_alloc, &d_all, &effective_weights, note_seq, ln_seq, sr, config.rescale_threshold);
-        components[2] = Self::contribution_star(&burst_alloc, &d_all, &effective_weights, note_seq, ln_seq, sr, config.rescale_threshold);
-        components[3] = Self::contribution_star(&ln_usage_alloc, &d_all, &effective_weights, note_seq, ln_seq, sr, config.rescale_threshold);
-        components[4] = Self::contribution_star(&ln_release_alloc, &d_all, &effective_weights, note_seq, ln_seq, sr, config.rescale_threshold);
-        components[5] = Self::contribution_star(&anchor_alloc, &d_all, &effective_weights, note_seq, ln_seq, sr, config.rescale_threshold);
+        components[0] = Self::contribution_star(
+            &bracket_alloc,
+            &d_all,
+            &effective_weights,
+            note_seq,
+            ln_seq,
+            sr,
+            config.rescale_threshold,
+        );
+        components[1] = Self::contribution_star(
+            &jack_alloc,
+            &d_all,
+            &effective_weights,
+            note_seq,
+            ln_seq,
+            sr,
+            config.rescale_threshold,
+        );
+        components[2] = Self::contribution_star(
+            &burst_alloc,
+            &d_all,
+            &effective_weights,
+            note_seq,
+            ln_seq,
+            sr,
+            config.rescale_threshold,
+        );
+        components[3] = Self::contribution_star(
+            &ln_usage_alloc,
+            &d_all,
+            &effective_weights,
+            note_seq,
+            ln_seq,
+            sr,
+            config.rescale_threshold,
+        );
+        components[4] = Self::contribution_star(
+            &ln_release_alloc,
+            &d_all,
+            &effective_weights,
+            note_seq,
+            ln_seq,
+            sr,
+            config.rescale_threshold,
+        );
+        components[5] = Self::contribution_star(
+            &anchor_alloc,
+            &d_all,
+            &effective_weights,
+            note_seq,
+            ln_seq,
+            sr,
+            config.rescale_threshold,
+        );
 
         Self::normalise_components(sr, &mut components);
 
@@ -877,17 +1097,35 @@ impl SRCalculator {
 
     fn burst_term(burst_value: f64, release_value: f64, abar: f64, density: f64) -> f64 {
         let component = 0.8 * burst_value + release_value * 35.0 / (density + 8.0);
-        let coordination = if abar <= 0.0 { 0.0 } else { abar.powf(2.0 / 3.0) };
+        let coordination = if abar <= 0.0 {
+            0.0
+        } else {
+            abar.powf(2.0 / 3.0)
+        };
 
         0.6 * safe_pow(coordination * component, 1.5)
     }
 
-    fn local_difficulty(bracket: f64, abar: f64, active_columns: f64, jack_term: f64, burst_term: f64) -> f64 {
+    fn local_difficulty(
+        bracket: f64,
+        abar: f64,
+        active_columns: f64,
+        jack_term: f64,
+        burst_term: f64,
+    ) -> f64 {
         let coordination = Self::coordination_power(abar, active_columns);
         let sum_terms = jack_term + burst_term;
-        let s = if sum_terms <= 0.0 { 0.0 } else { sum_terms.powf(2.0 / 3.0) };
+        let s = if sum_terms <= 0.0 {
+            0.0
+        } else {
+            sum_terms.powf(2.0 / 3.0)
+        };
         let denominator = bracket + s + 1.0;
-        let t_value = if denominator <= 0.0 { 0.0 } else { coordination * bracket / denominator };
+        let t_value = if denominator <= 0.0 {
+            0.0
+        } else {
+            coordination * bracket / denominator
+        };
         let sqrt_component = s.max(0.0).sqrt();
         let primary = 2.7 * sqrt_component * safe_pow(t_value, 1.5);
 
@@ -904,11 +1142,18 @@ impl SRCalculator {
         total_sr: f64,
         threshold: f64,
     ) -> f64 {
-        if contribution.is_empty() || total_difficulty.is_empty() || weights.is_empty() || total_sr <= 0.0 {
+        if contribution.is_empty()
+            || total_difficulty.is_empty()
+            || weights.is_empty()
+            || total_sr <= 0.0
+        {
             return 0.0;
         }
 
-        let count = contribution.len().min(total_difficulty.len()).min(weights.len());
+        let count = contribution
+            .len()
+            .min(total_difficulty.len())
+            .min(weights.len());
         let mut clamped = vec![0.0; count];
         let mut local_weights = vec![0.0; count];
 
@@ -921,7 +1166,8 @@ impl SRCalculator {
             return 0.0;
         }
 
-        let component_sr = Self::finalise_difficulty(&clamped, &local_weights, note_seq, ln_seq, threshold);
+        let component_sr =
+            Self::finalise_difficulty(&clamped, &local_weights, note_seq, ln_seq, threshold);
 
         round2(component_sr.clamp(0.0, total_sr))
     }
@@ -957,7 +1203,11 @@ impl SRCalculator {
         rescale_threshold: f64,
     ) -> f64 {
         // Combine and sort by difficulty, stable sort to match C#
-        let mut combined: Vec<(usize, f64, f64)> = difficulties.iter().enumerate().map(|(idx, &d)| (idx, d, weights[idx].max(0.0))).collect();
+        let mut combined: Vec<(usize, f64, f64)> = difficulties
+            .iter()
+            .enumerate()
+            .map(|(idx, &d)| (idx, d, weights[idx].max(0.0)))
+            .collect();
         combined.sort_by(|a, b| {
             use std::cmp::Ordering;
             if a.1.is_nan() && b.1.is_nan() {
@@ -968,16 +1218,16 @@ impl SRCalculator {
                 Ordering::Less
             } else {
                 match a.1.partial_cmp(&b.1).unwrap() {
-                    Ordering::Equal => a.0.cmp(&b.0),  // stable by original index
+                    Ordering::Equal => a.0.cmp(&b.0), // stable by original index
                     ord => ord,
                 }
             }
         });
-        
+
         if combined.is_empty() {
             return 0.0;
         }
-        
+
         let sorted_d: Vec<f64> = combined.iter().map(|(_, d, _)| *d).collect();
         let sorted_weights: Vec<f64> = combined.iter().map(|(_, _, w)| *w).collect();
 
@@ -1069,7 +1319,11 @@ pub fn round2(value: f64) -> f64 {
 }
 
 fn safe_pow(value: f64, exponent: f64) -> f64 {
-    if value <= 0.0 { 0.0 } else { value.powf(exponent) }
+    if value <= 0.0 {
+        0.0
+    } else {
+        value.powf(exponent)
+    }
 }
 
 /// `(column, head_ms, tail_ms)` from a parsed `.osu`, with `tail = -1` for a tap.
@@ -1079,8 +1333,41 @@ fn build_note_seq(data: &ParsedData) -> Vec<SrNote> {
         .enumerate()
         .map(|(i, &col)| {
             let h = data.note_starts[i];
-            let t = if data.note_types[i] == 128 { data.note_ends[i] } else { -1 };
+            let t = if data.note_types[i] == 128 {
+                data.note_ends[i]
+            } else {
+                -1
+            };
             (col, h, t)
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::SRCalculator;
+
+    #[test]
+    fn rbar_uses_the_direct_same_column_successor_for_duplicate_heads() {
+        let column_notes = vec![vec![(0, 100, 200), (0, 100, 300), (0, 400, -1)]];
+        let tail_notes = vec![((0, 100, 200), 0), ((0, 100, 300), 1)];
+        let corners = vec![0.0, 100.0, 200.0, 300.0, 400.0, 500.0];
+        let x = 0.1;
+
+        let actual = SRCalculator::compute_rbar(x, &column_notes, &tail_notes, &corners);
+
+        let release_leniency = |tail: i32, next_head: i32| {
+            let before = 0.001 * ((tail - 100 - 80) as f64).abs() / x;
+            let after = 0.001 * ((next_head - tail - 80) as f64).abs() / x;
+            2.0 / (2.0 + (-5.0 * (before - 0.75)).exp() + (-5.0 * (after - 0.75)).exp())
+        };
+        let first_release = release_leniency(200, 100);
+        let second_release = release_leniency(300, 400);
+        let delta: f64 = 0.001 * (300.0 - 200.0);
+        let unsmoothed =
+            0.08 * delta.powf(-0.5) / x * (1.0 + 0.8 * (first_release + second_release));
+        let expected_at_200 = unsmoothed * 0.1;
+
+        assert!((actual[2] - expected_at_200).abs() < 1e-12);
+    }
 }

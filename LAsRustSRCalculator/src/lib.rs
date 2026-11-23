@@ -5,6 +5,7 @@ pub mod beatmap;
 pub mod attributes;
 pub mod calculator;
 pub mod catch;
+pub mod catch_performance;
 pub mod mania;
 pub mod mania_converter;
 pub mod mania_performance;
