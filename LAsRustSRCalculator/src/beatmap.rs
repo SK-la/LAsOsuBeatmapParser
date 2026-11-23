@@ -130,9 +130,9 @@ pub struct DifficultySettings {
 impl DifficultySettings {
     pub fn mania_key_count(&self) -> Option<usize> {
         let value = self.circle_size?;
-        let keys = value.round();
-        (value.is_finite() && (1.0..=18.0).contains(&keys) && (value - keys).abs() < 1e-7)
-            .then_some(keys as usize)
+        value
+            .is_finite()
+            .then(|| value.round_ties_even().clamp(1.0, 18.0) as usize)
     }
 }
 
@@ -168,6 +168,7 @@ pub struct TimingControlPoint {
 pub struct DifficultyControlPoint {
     pub time: f64,
     pub speed_multiplier: f64,
+    pub generate_ticks: bool,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -183,6 +184,7 @@ pub struct EffectControlPoint {
     pub time: f64,
     pub kiai: bool,
     pub omit_first_bar_line: bool,
+    pub scroll_speed: Option<f64>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -243,6 +245,8 @@ pub struct SliderEdgeSet {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct HitObject {
+    /// Zero-based order in the source file, before objects are sorted by start time.
+    pub source_order: usize,
     pub position: [f64; 2],
     pub start_time: f64,
     pub type_flags: u32,
@@ -391,8 +395,12 @@ impl OsuBeatmap {
         };
 
         let mut hit_objects = Vec::with_capacity(beatmap.hit_object_lines.len());
-        for (line_no, object_line) in beatmap.hit_object_lines {
-            hit_objects.push(parse_hit_object(&object_line, line_no, mode, key_count)?);
+        for (source_order, (line_no, object_line)) in
+            beatmap.hit_object_lines.into_iter().enumerate()
+        {
+            let mut object = parse_hit_object(&object_line, line_no, mode, key_count)?;
+            object.source_order = source_order;
+            hit_objects.push(object);
         }
         hit_objects.sort_by(|a, b| a.start_time.total_cmp(&b.start_time));
 
@@ -402,7 +410,7 @@ impl OsuBeatmap {
         beatmap
             .breaks
             .sort_by(|a, b| a.start_time.total_cmp(&b.start_time));
-        let control_points = build_control_points(&beatmap.timing_points);
+        let control_points = build_control_points(&beatmap.timing_points, mode);
 
         Ok(Self {
             version,
@@ -529,22 +537,25 @@ fn parse_timing_point(line: &str, line_no: usize) -> Result<TimingPoint, ParseEr
         ));
     }
     let time = parse_finite(fields[0], line_no, "timing point time")?;
-    let beat_length = parse_finite(fields[1], line_no, "beat length")?;
-    if beat_length == 0.0 {
-        return Err(ParseError::at(line_no, "beat length cannot be zero"));
-    }
-    let meter = optional_field(fields.get(2), 4, line_no, "meter")?;
-    let sample_set = optional_field(fields.get(3), 0, line_no, "sample set")?;
-    let sample_index = optional_field(fields.get(4), 0, line_no, "sample index")?;
-    let volume = optional_field(fields.get(5), 100, line_no, "volume")?;
-    let uninherited = optional_field(fields.get(6), 1, line_no, "uninherited flag")? != 0;
-    let effects = optional_field(fields.get(7), 0, line_no, "effects")?;
-    if meter <= 0 || !(0..=100).contains(&volume) {
+    let beat_length = parse_value::<f64>(fields[1], line_no, "beat length")?;
+    let uninherited = fields
+        .get(6)
+        .filter(|value| !value.trim().is_empty())
+        .map_or(true, |value| value.trim().starts_with('1'));
+    if (!beat_length.is_finite() && !(beat_length.is_nan() && !uninherited))
+        || (beat_length.is_nan() && uninherited)
+    {
         return Err(ParseError::at(
             line_no,
-            "timing point meter or volume is out of range",
+            "beat length must be finite, except inherited NaN may disable slider ticks",
         ));
     }
+
+    let meter = optional_field(fields.get(2), 4, line_no, "meter")?.max(1);
+    let sample_set = optional_field(fields.get(3), 0, line_no, "sample set")?;
+    let sample_index = optional_field(fields.get(4), 0, line_no, "sample index")?.max(0);
+    let volume = optional_field(fields.get(5), 100, line_no, "volume")?.clamp(0, 100);
+    let effects = optional_field(fields.get(7), 0, line_no, "effects")?;
     Ok(TimingPoint {
         time,
         beat_length,
@@ -747,6 +758,7 @@ fn parse_hit_object(
         .map(|raw| parse_hit_sample(raw, line_no))
         .transpose()?;
     Ok(HitObject {
+        source_order: 0,
         position: [x, y],
         start_time,
         type_flags,
@@ -839,32 +851,56 @@ fn parse_hit_sample(value: &str, line_no: usize) -> Result<HitSample, ParseError
     })
 }
 
-fn build_control_points(timing_points: &[TimingPoint]) -> ControlPoints {
+fn build_control_points(timing_points: &[TimingPoint], mode: GameMode) -> ControlPoints {
     let mut result = ControlPoints::default();
-    for point in timing_points {
-        if point.uninherited {
+    let mut index = 0;
+
+    while index < timing_points.len() {
+        let time = timing_points[index].time;
+        let start = index;
+        while index + 1 < timing_points.len() && timing_points[index + 1].time == time {
+            index += 1;
+        }
+        let same_time = &timing_points[start..=index];
+        let timing_point = same_time.iter().find(|point| point.uninherited);
+        let inherited_point = same_time.iter().rev().find(|point| !point.uninherited);
+        let property_point = inherited_point
+            .or(timing_point)
+            .expect("group has a timing point");
+
+        if let Some(point) = timing_point {
             result.timing.push(TimingControlPoint {
                 time: point.time,
-                beat_length: point.beat_length,
+                beat_length: point.beat_length.clamp(0.6, 600_000.0),
                 meter: point.meter,
             });
-        } else if point.beat_length < 0.0 {
-            result.difficulty.push(DifficultyControlPoint {
-                time: point.time,
-                speed_multiplier: (-100.0 / point.beat_length).clamp(0.1, 10.0),
-            });
         }
+
+        let speed_multiplier = if property_point.beat_length < 0.0 {
+            -100.0 / property_point.beat_length
+        } else {
+            1.0
+        };
+        result.difficulty.push(DifficultyControlPoint {
+            time,
+            speed_multiplier,
+            generate_ticks: !property_point.beat_length.is_nan(),
+        });
         result.sample.push(SampleControlPoint {
-            time: point.time,
-            sample_set: point.sample_set,
-            sample_index: point.sample_index,
-            volume: point.volume,
+            time,
+            sample_set: property_point.sample_set,
+            sample_index: property_point.sample_index,
+            volume: property_point.volume,
         });
         result.effect.push(EffectControlPoint {
-            time: point.time,
-            kiai: point.effects & 1 != 0,
-            omit_first_bar_line: point.effects & 8 != 0,
+            time,
+            kiai: property_point.effects & 1 != 0,
+            omit_first_bar_line: property_point.effects & 8 != 0,
+            scroll_speed: matches!(mode, GameMode::Taiko | GameMode::Mania)
+                .then_some(speed_multiplier),
         });
+
+        index += 1;
     }
     result
 }
@@ -911,7 +947,7 @@ mod tests {
             HitObjectKind::Hold { end_time: 600.0 }
         ));
         assert_eq!(bytes_map.control_points.timing.len(), 1);
-        assert_eq!(bytes_map.control_points.difficulty[0].speed_multiplier, 2.0);
+        assert_eq!(bytes_map.control_points.difficulty[1].speed_multiplier, 2.0);
         assert_eq!(bytes_map.breaks[0].duration(), 500.0);
     }
 
@@ -925,6 +961,42 @@ mod tests {
         assert_eq!(beatmap.difficulty.mania_key_count(), Some(5));
         assert!(!beatmap.hit_objects.is_empty());
         assert!(!beatmap.timing_points.is_empty());
+    }
+
+    #[test]
+    fn mania_columns_round_circle_size_to_nearest_even_and_clamp() {
+        assert_eq!(
+            DifficultySettings {
+                circle_size: Some(2.5),
+                ..Default::default()
+            }
+            .mania_key_count(),
+            Some(2)
+        );
+        assert_eq!(
+            DifficultySettings {
+                circle_size: Some(3.5),
+                ..Default::default()
+            }
+            .mania_key_count(),
+            Some(4)
+        );
+        assert_eq!(
+            DifficultySettings {
+                circle_size: Some(0.2),
+                ..Default::default()
+            }
+            .mania_key_count(),
+            Some(1)
+        );
+        assert_eq!(
+            DifficultySettings {
+                circle_size: Some(20.0),
+                ..Default::default()
+            }
+            .mania_key_count(),
+            Some(18)
+        );
     }
 
     #[test]
@@ -979,6 +1051,30 @@ mod tests {
         let from_reader = OsuBeatmap::parse_reader(Cursor::new(text.as_bytes())).unwrap();
         let _ = std::fs::remove_file(temp_path);
         assert_eq!(from_file, from_reader);
+    }
+
+    #[test]
+    fn same_time_timing_points_merge_with_green_point_priority() {
+        let beatmap = OsuBeatmap::parse_bytes(
+            b"osu file format v14\n[General]\nMode:3\n[Difficulty]\nCircleSize:4\n[TimingPoints]\n0,500,4,1,0,100,1,0\n0,-50,4,2,0,30,0,1\n0,-25,4,3,0,40,0,0\n0,-20,4,4,0,50,2,0\n",
+        )
+        .unwrap();
+        assert_eq!(beatmap.timing_points.len(), 4);
+        assert_eq!(beatmap.control_points.timing.len(), 1);
+        assert_eq!(beatmap.control_points.timing[0].beat_length, 500.0);
+        assert_eq!(beatmap.control_points.difficulty.len(), 1);
+        assert_eq!(beatmap.control_points.difficulty[0].speed_multiplier, 5.0);
+        assert_eq!(beatmap.control_points.sample[0].sample_set, 4);
+        assert_eq!(beatmap.control_points.sample[0].volume, 50);
+        assert_eq!(beatmap.control_points.effect[0].scroll_speed, Some(5.0));
+
+        let no_ticks = OsuBeatmap::parse_bytes(
+            b"osu file format v14\n[General]\nMode:0\n[TimingPoints]\n0,500,4,0,0,100,1,0\n10,NaN,4,0,0,100,0,0\n",
+        )
+        .unwrap();
+        assert_eq!(no_ticks.control_points.difficulty.len(), 2);
+        assert!(!no_ticks.control_points.difficulty[1].generate_ticks);
+        assert_eq!(no_ticks.control_points.difficulty[1].speed_multiplier, 1.0);
     }
 
     #[test]

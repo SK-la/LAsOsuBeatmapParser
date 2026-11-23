@@ -2,9 +2,18 @@ pub mod sr;
 pub mod note;
 pub mod cross_matrix;
 pub mod beatmap;
+pub mod attributes;
+pub mod calculator;
+pub mod catch;
+pub mod mania;
+pub mod mania_converter;
+pub mod mania_performance;
+pub mod mods;
+pub mod normalization;
 pub mod parser;
 pub mod ffi;
 pub mod math;
+pub mod score;
 pub mod skills;
 
 #[cfg(test)]
