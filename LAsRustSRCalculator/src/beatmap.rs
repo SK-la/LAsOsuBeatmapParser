@@ -964,6 +964,31 @@ mod tests {
     }
 
     #[test]
+    fn parses_each_rulesets_official_difficulty_fixture() {
+        let fixtures = [
+            (
+                include_bytes!("../tests/fixtures/osu-diffcalc-test.osu").as_slice(),
+                GameMode::Standard,
+            ),
+            (
+                include_bytes!("../tests/fixtures/taiko-diffcalc-test.osu").as_slice(),
+                GameMode::Taiko,
+            ),
+            (
+                include_bytes!("../tests/fixtures/catch-diffcalc-test.osu").as_slice(),
+                GameMode::Catch,
+            ),
+        ];
+
+        for (bytes, expected_mode) in fixtures {
+            let beatmap = OsuBeatmap::parse_bytes(bytes).unwrap();
+            assert_eq!(beatmap.mode, expected_mode);
+            assert!(!beatmap.hit_objects.is_empty());
+            assert!(!beatmap.timing_points.is_empty());
+        }
+    }
+
+    #[test]
     fn mania_columns_round_circle_size_to_nearest_even_and_clamp() {
         assert_eq!(
             DifficultySettings {
