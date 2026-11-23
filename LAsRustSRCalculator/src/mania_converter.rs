@@ -4,19 +4,16 @@
 //! `PassThroughPatternGenerator`, and `SpinnerPatternGenerator`. It is intentionally not a converter for osu!standard
 //! maps played as Mania: those maps require the probabilistic legacy pattern generators, which are a separate port.
 //!
-//! Slider duration follows `ConvertSlider.Duration = SpanCount * Path.Distance / Velocity`. When osu! supplies a
-//! positive pixel length, `SliderPath.ExpectedDistance` makes the final path distance that declared length except
-//! for degenerate/ambiguous path cases. Without a declared length, only exact linear paths are calculated here;
-//! Bezier/Catmull/perfect-curve approximation is returned as an explicit error until the framework path
-//! approximator is ported.
+//! Slider duration uses the normalized legacy path and timing points.
 
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 
-use crate::beatmap::{GameMode, SliderCurveType, TimingPoint};
+use crate::beatmap::{GameMode, TimingPoint};
 use crate::mania::ManiaNote;
 use crate::mods::Mod;
 use crate::normalization::{NormalizedBeatmap, NormalizedHitObjectKind};
+use crate::slider_path::{SliderPath, SliderPathError, SliderPathOptions};
 
 const MAX_MANIA_COLUMNS: usize = 18;
 const BASE_SCORING_DISTANCE: f64 = 100.0;
@@ -52,10 +49,7 @@ pub enum ManiaConversionError {
     },
     SliderPathDistanceUnavailable {
         object_index: usize,
-        curve_type: SliderCurveType,
-    },
-    AmbiguousSliderPathExtension {
-        object_index: usize,
+        error: SliderPathError,
     },
 }
 
@@ -97,15 +91,8 @@ impl Display for ManiaConversionError {
             }
             Self::SliderPathDistanceUnavailable {
                 object_index,
-                curve_type,
-            } => write!(
-                f,
-                "Mania slider {object_index} has no declared pixel length and its {curve_type:?} path distance is not implemented"
-            ),
-            Self::AmbiguousSliderPathExtension { object_index } => write!(
-                f,
-                "Mania slider {object_index} has a non-linear repeated endpoint; the current normalized path model cannot determine lazer's extension exception"
-            ),
+                error,
+            } => write!(f, "Mania slider {object_index}: {error}"),
         }
     }
 }
@@ -189,13 +176,22 @@ impl ManiaBeatmapConverter {
                     path_control_points,
                     repeat_count,
                     pixel_length,
+                    ..
                 } => {
-                    let distance = slider_distance(
-                        object_index,
-                        raw_curve.curve_type,
+                    let distance = SliderPath::from_legacy_curve(
+                        raw_curve,
                         path_control_points,
                         *pixel_length,
-                    )?;
+                        beatmap.version,
+                        SliderPathOptions::default(),
+                    )
+                    .map_err(
+                        |error| ManiaConversionError::SliderPathDistanceUnavailable {
+                            object_index,
+                            error,
+                        },
+                    )?
+                    .distance();
                     let span_count = repeat_count
                         .checked_add(1)
                         .ok_or(ManiaConversionError::SliderSpanCountOverflow { object_index })?;
@@ -212,18 +208,11 @@ impl ManiaBeatmapConverter {
                         return Err(ManiaConversionError::InvalidSliderVelocity { object_index });
                     }
 
-                    let mut effective_span_count = span_count;
-                    if distance == 0.0 && span_count > 1 {
-                        // C# resets repeats on a zero-distance slider. Its AlmostEquals epsilon is owned by the
-                        // framework and unavailable here, so ambiguous near-zero paths are surfaced rather than guessed.
-                        effective_span_count = 1;
-                    } else if distance > 0.0 && distance < 1e-7 && span_count > 1 {
-                        return Err(ManiaConversionError::SliderPathDistanceUnavailable {
-                            object_index,
-                            curve_type: raw_curve.curve_type,
-                        });
-                    }
-
+                    let effective_span_count = if distance.abs() <= 1e-7 {
+                        1
+                    } else {
+                        span_count
+                    };
                     let duration = effective_span_count as f64 * distance / velocity;
                     ManiaNote {
                         start_time_ms: object.start_time,
@@ -375,98 +364,6 @@ fn slider_velocity_multiplier_at(beatmap: &NormalizedBeatmap, time: f64) -> f64 
         .unwrap_or(1.0)
 }
 
-fn slider_distance(
-    object_index: usize,
-    curve_type: SliderCurveType,
-    path_control_points: &[[f64; 2]],
-    expected_distance: Option<f64>,
-) -> Result<f64, ManiaConversionError> {
-    // ConvertHitObjectParser turns a declared length of zero into `null`, meaning use calculated path distance.
-    let expected_distance = expected_distance.filter(|distance| *distance != 0.0);
-
-    // ConvertHitObjectParser prepends the slider origin. Its Vec2 point arithmetic is f32, including the relative
-    // subtraction already represented by `path_control_points` in the normalized model.
-    let mut points = Vec::with_capacity(path_control_points.len() + 1);
-    points.push([0.0_f32, 0.0_f32]);
-    points.extend(
-        path_control_points
-            .iter()
-            .map(|point| [point[0] as f32, point[1] as f32]),
-    );
-
-    if points
-        .iter()
-        .any(|point| !point[0].is_finite() || !point[1].is_finite())
-    {
-        return Err(ManiaConversionError::SliderPathDistanceUnavailable {
-            object_index,
-            curve_type,
-        });
-    }
-
-    if points.len() <= 1 || points.iter().all(|point| *point == points[0]) {
-        return Ok(0.0);
-    }
-
-    let is_exact_polyline = curve_type == SliderCurveType::Linear || points.len() <= 2;
-    let has_repeated_endpoint =
-        points.len() >= 2 && points[points.len() - 1] == points[points.len() - 2];
-
-    if is_exact_polyline {
-        let calculated_distance = polyline_distance(&points);
-        return match expected_distance {
-            Some(expected) if expected.is_finite() && expected >= 0.0 => {
-                // SliderPath avoids extending a path whose last two calculated vertices are identical.
-                if expected > calculated_distance && has_repeated_endpoint {
-                    Ok(calculated_distance)
-                } else {
-                    Ok(expected)
-                }
-            }
-            Some(_) => Err(ManiaConversionError::SliderPathDistanceUnavailable {
-                object_index,
-                curve_type,
-            }),
-            None => Ok(calculated_distance),
-        };
-    }
-
-    if expected_distance.is_none() {
-        return Err(ManiaConversionError::SliderPathDistanceUnavailable {
-            object_index,
-            curve_type,
-        });
-    }
-
-    let expected = expected_distance.unwrap();
-    if !expected.is_finite() || expected < 0.0 {
-        return Err(ManiaConversionError::SliderPathDistanceUnavailable {
-            object_index,
-            curve_type,
-        });
-    }
-
-    if has_repeated_endpoint {
-        return Err(ManiaConversionError::AmbiguousSliderPathExtension { object_index });
-    }
-
-    // For a non-degenerate path with declared pixel length, SliderPath's final Distance is exactly
-    // ExpectedDistance after shortening/extension. The normalized model lacks the segment/degree data needed to
-    // reconstruct the exceptional zero-length endpoint case, which is rejected above.
-    Ok(expected)
-}
-
-fn polyline_distance(points: &[[f32; 2]]) -> f64 {
-    points
-        .windows(2)
-        .map(|segment| {
-            let x = segment[1][0] - segment[0][0];
-            let y = segment[1][1] - segment[0][1];
-            ((x * x + y * y).sqrt()) as f64
-        })
-        .sum()
-}
-
 fn spinner_seed(beatmap: &NormalizedBeatmap) -> i32 {
     // ManiaBeatmapConverter seeds LegacyRandom before applying any conversion mod. Beatmap difficulty fields are
     // floats in C#, so retain the f32 addition/rounding for drain + circle size and approach rate.
@@ -521,6 +418,7 @@ impl LegacyRandom {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::beatmap::SliderCurveType;
     use crate::beatmap::{
         ControlPoints, DifficultyControlPoint, EffectControlPoint, TimingControlPoint,
     };
@@ -667,11 +565,14 @@ mod tests {
                 NormalizedHitObjectKind::Slider {
                     raw_curve: crate::beatmap::SliderCurve {
                         curve_type: SliderCurveType::Bezier,
+                        segment_count: 1,
+                        raw_path: String::new(),
                         points: vec![[100.0, 0.0]],
                     },
                     path_control_points: vec![[100.0, 0.0]],
                     repeat_count: 1,
                     pixel_length: Some(100.0),
+                    edge_sounds: vec![],
                 },
             )],
         );
@@ -714,11 +615,14 @@ mod tests {
                 NormalizedHitObjectKind::Slider {
                     raw_curve: crate::beatmap::SliderCurve {
                         curve_type: SliderCurveType::Linear,
+                        segment_count: 1,
+                        raw_path: String::new(),
                         points: vec![[3.0, 4.0], [6.0, 8.0]],
                     },
                     path_control_points: vec![[3.0, 4.0], [6.0, 8.0]],
                     repeat_count: 0,
                     pixel_length: None,
+                    edge_sounds: vec![],
                 },
             )],
         );
@@ -739,11 +643,14 @@ mod tests {
                 NormalizedHitObjectKind::Slider {
                     raw_curve: crate::beatmap::SliderCurve {
                         curve_type: SliderCurveType::Linear,
+                        segment_count: 1,
+                        raw_path: String::new(),
                         points: vec![[100.0, 0.0]],
                     },
                     path_control_points: vec![[100.0, 0.0]],
                     repeat_count: 0,
                     pixel_length: Some(100.0),
+                    edge_sounds: vec![],
                 },
             )],
         );
@@ -796,11 +703,14 @@ mod tests {
                 NormalizedHitObjectKind::Slider {
                     raw_curve: crate::beatmap::SliderCurve {
                         curve_type: SliderCurveType::Linear,
+                        segment_count: 1,
+                        raw_path: String::new(),
                         points: vec![[0.0, 0.0]],
                     },
                     path_control_points: vec![[0.0, 0.0]],
                     repeat_count: 2,
                     pixel_length: Some(100.0),
+                    edge_sounds: vec![],
                 },
             )],
         );
@@ -810,7 +720,7 @@ mod tests {
     }
 
     #[test]
-    fn no_declared_non_linear_slider_distance_is_an_explicit_error() {
+    fn calculates_bezier_slider_distance_without_declared_length() {
         let map = beatmap(
             4.0,
             vec![normalized_object(
@@ -820,22 +730,20 @@ mod tests {
                 NormalizedHitObjectKind::Slider {
                     raw_curve: crate::beatmap::SliderCurve {
                         curve_type: SliderCurveType::Bezier,
+                        segment_count: 1,
+                        raw_path: String::new(),
                         points: vec![[100.0, 50.0], [200.0, 0.0]],
                     },
                     path_control_points: vec![[100.0, 50.0], [200.0, 0.0]],
                     repeat_count: 0,
                     pixel_length: None,
+                    edge_sounds: vec![],
                 },
             )],
         );
 
-        assert!(matches!(
-            ManiaBeatmapConverter::convert(&map, &[]),
-            Err(ManiaConversionError::SliderPathDistanceUnavailable {
-                object_index: 0,
-                ..
-            })
-        ));
+        let (notes, _) = ManiaBeatmapConverter::convert(&map, &[]).unwrap();
+        assert!(notes[0].end_time_ms > 1400.0);
     }
 
     #[test]

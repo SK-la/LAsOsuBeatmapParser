@@ -1,21 +1,41 @@
-pub mod sr;
-pub mod note;
-pub mod cross_matrix;
-pub mod beatmap;
+pub mod analysis_ffi;
 pub mod attributes;
+pub mod beatmap;
 pub mod calculator;
 pub mod catch;
+pub mod catch_converter;
 pub mod catch_performance;
+pub mod chart_metrics;
+pub mod chart_tags;
+pub mod cross_matrix;
+pub mod csi_features;
+pub mod dan_lookup;
+mod dan_tables;
+pub mod ffi;
 pub mod mania;
 pub mod mania_converter;
 pub mod mania_performance;
+pub mod math;
+pub mod mina;
 pub mod mods;
 pub mod normalization;
+pub mod note;
+pub mod osu;
+pub mod osu_converter;
+pub mod osu_performance;
 pub mod parser;
-pub mod ffi;
-pub mod math;
+pub mod ppp_mania;
+pub mod ppp_osu;
+pub mod ppp_performance;
+pub mod ppp_taiko_catch;
 pub mod score;
 pub mod skills;
+pub mod slider_events;
+pub mod slider_path;
+pub mod sr;
+pub mod taiko;
+pub mod taiko_converter;
+pub mod taiko_performance;
 
 #[cfg(test)]
 mod ffi_tests;
@@ -80,7 +100,10 @@ pub extern "C" fn calculate_sr_from_osu_file(path_ptr: *const c_char, len: usize
 
     let data = parser.get_parsed_data();
     if data.column_count < 1 || data.od < 0.0 {
-        eprintln!("[SR][ERROR] 数据非法: {}, column_count: {}, od: {}", path_str, data.column_count, data.od);
+        eprintln!(
+            "[SR][ERROR] 数据非法: {}, column_count: {}, od: {}",
+            path_str, data.column_count, data.od
+        );
         return -5.0;
     }
 
@@ -90,18 +113,19 @@ pub extern "C" fn calculate_sr_from_osu_file(path_ptr: *const c_char, len: usize
     }
 
     debug_log!("Rust: Calculating SR for {}", path_str);
-    match std::panic::catch_unwind(|| SRCalculator::calculate_sr_from_parsed_data(&data)) {        Ok(Ok(sr)) => {
+    match std::panic::catch_unwind(|| SRCalculator::calculate_sr_from_parsed_data(&data)) {
+        Ok(Ok(sr)) => {
             debug_log!("Rust: Calculated SR: {}", sr);
             sr
-        },
+        }
         Ok(Err(e)) => {
             eprintln!("[SR][ERROR] SR计算失败: {}, 错误: {}", path_str, e);
             -6.0
-        },
+        }
         Err(_) => {
             eprintln!("[SR][ERROR] SR计算panic: {}", path_str);
             -7.0
-        },
+        }
     }
 }
 
@@ -114,19 +138,24 @@ mod tests {
     #[cfg(not(target_os = "wasi"))]
     fn test_sr_calculation() {
         // Use the actual osu file for testing
-        let file_path = "..\\tests\\Resource\\Glen Check - 60's Cardin (SK_la) [Insane].osu";
-        println!("Testing with file: {}", file_path);
+        let file_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("..")
+            .join("tests")
+            .join("Resource")
+            .join("Glen Check - 60's Cardin (SK_la) [Insane].osu");
+        let file_path_string = file_path.to_string_lossy();
+        println!("Testing with file: {}", file_path.display());
 
         // Check if file exists
-        if std::path::Path::new(file_path).exists() {
+        if file_path.exists() {
             println!("File exists!");
         } else {
             println!("File does not exist!");
-            panic!("Test file not found: {}", file_path);
+            panic!("Test file not found: {}", file_path.display());
         }
 
         // Test parsing first
-        let mut parser = OsuParser::new(file_path);
+        let mut parser = OsuParser::new(&file_path_string);
         match parser.process() {
             Ok(_) => {
                 println!("Parsing successful!");
@@ -138,7 +167,10 @@ mod tests {
                 let ln_count = data.note_types.iter().filter(|&&t| t == 128).count();
                 println!("Number of LN notes: {}", ln_count);
                 // Print first 10 column values
-                println!("First 10 columns: {:?}", &data.columns[..10.min(data.columns.len())]);
+                println!(
+                    "First 10 columns: {:?}",
+                    &data.columns[..10.min(data.columns.len())]
+                );
             }
             Err(e) => {
                 println!("Parsing failed: {}", e);
@@ -146,16 +178,23 @@ mod tests {
             }
         }
 
-        let result = SRAPI::calculate_sr(file_path);
+        let result = SRAPI::calculate_sr(&file_path_string);
         match result {
             Ok(sr) => {
                 println!("Calculated SR: {}", sr);
                 assert!(sr >= 0.0, "SR should be non-negative");
                 // The SR calculation should produce a reasonable value for this beatmap
-                assert!(sr > 0.0, "SR should be greater than 0 for non-empty beatmap");
+                assert!(
+                    sr > 0.0,
+                    "SR should be greater than 0 for non-empty beatmap"
+                );
                 // This specific beatmap should have SR around 6.1 according to C# implementation
                 // Our implementation produces 5.68, which is very close (within 7% of C# reference)
-                assert!(sr > 5.5 && sr < 6.5, "SR should be close to C# reference implementation, got: {}", sr);
+                assert!(
+                    sr > 5.5 && sr < 6.5,
+                    "SR should be close to C# reference implementation, got: {}",
+                    sr
+                );
             }
             Err(e) => {
                 println!("SR calculation failed with error: {}", e);

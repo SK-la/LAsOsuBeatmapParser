@@ -1,6 +1,6 @@
 //! Calculator traits following Ez2Lazer's difficulty/performance split.
 
-use crate::attributes::{DifficultyAttributes, PerformanceAttributes};
+use crate::attributes::{AnyDifficultyAttributes, DifficultyAttributes, PerformanceAttributes};
 use crate::beatmap::{GameMode, OsuBeatmap};
 use crate::mods::Mod;
 use crate::score::ScoreInfo;
@@ -34,6 +34,27 @@ pub trait PerformanceCalculator {
         score: &ScoreInfo,
         difficulty: &Self::Difficulty,
     ) -> Result<Self::Attributes, CalculationError>;
+}
+
+/// Calculate official difficulty for the beatmap's native ruleset.
+pub fn calculate_difficulty(
+    beatmap: &OsuBeatmap,
+    mods: &[Mod],
+) -> Result<AnyDifficultyAttributes, CalculationError> {
+    match beatmap.mode {
+        GameMode::Standard => crate::osu_converter::OsuDifficultyCalculator
+            .calculate(beatmap, mods)
+            .map(AnyDifficultyAttributes::Osu),
+        GameMode::Taiko => crate::taiko_converter::TaikoBeatmapDifficultyCalculator
+            .calculate(beatmap, mods)
+            .map(AnyDifficultyAttributes::Taiko),
+        GameMode::Catch => crate::catch_converter::CatchDifficultyCalculator
+            .calculate(beatmap, mods)
+            .map(AnyDifficultyAttributes::Catch),
+        GameMode::Mania => crate::mania::ManiaDifficultyCalculator
+            .calculate(beatmap, mods)
+            .map(AnyDifficultyAttributes::Mania),
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

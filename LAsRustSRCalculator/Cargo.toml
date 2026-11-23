@@ -7,6 +7,9 @@ edition = "2024"
 name = "rust_sr_calculator"
 crate-type = ["rlib", "cdylib"]
 
+[dependencies]
+wasmi = { version = "1.0.9", default-features = false, features = ["std", "simd"] }
+
 [profile.release]
 opt-level = 3
 lto = true

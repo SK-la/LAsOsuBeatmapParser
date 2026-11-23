@@ -212,27 +212,20 @@ pub struct HitSample {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SliderCurveType {
     Bezier,
+    BSpline(usize),
     Catmull,
     Linear,
     Perfect,
     Other(char),
 }
 
-impl SliderCurveType {
-    fn parse(value: char) -> Self {
-        match value {
-            'B' => Self::Bezier,
-            'C' => Self::Catmull,
-            'L' => Self::Linear,
-            'P' => Self::Perfect,
-            other => Self::Other(other),
-        }
-    }
-}
-
 #[derive(Clone, Debug, PartialEq)]
 pub struct SliderCurve {
     pub curve_type: SliderCurveType,
+    /// Number of explicit curve tags in the legacy path string, including the initial tag.
+    pub segment_count: usize,
+    /// Original path field. It preserves explicit segment tags and spline degrees for later converters.
+    pub raw_path: String,
     /// Control points as `(x, y)` pairs; the object's position is the curve start.
     pub points: Vec<[f64; 2]>,
 }
@@ -781,21 +774,28 @@ fn split_hold_tail(value: &str, line_no: usize) -> Result<(f64, Option<&str>), P
 
 fn parse_curve(value: &str, line_no: usize) -> Result<SliderCurve, ParseError> {
     let mut parts = value.split('|');
-    let curve_type = parts
+    let first_tag = parts
         .next()
-        .and_then(|part| part.chars().next())
         .ok_or_else(|| ParseError::at(line_no, "slider curve type is empty"))?;
-    let points = parts
-        .map(|part| {
+    let curve_type = parse_curve_tag(first_tag, line_no)?;
+    let mut points = Vec::new();
+    let mut segment_count = 1;
+    for part in parts {
+        if part.chars().next().is_some_and(char::is_alphabetic) {
+            let _ = parse_curve_tag(part, line_no)?;
+            segment_count += 1;
+            continue;
+        }
+        points.push({
             let (x, y) = part
                 .split_once(':')
                 .ok_or_else(|| ParseError::at(line_no, "slider curve point must be x:y"))?;
-            Ok([
+            [
                 parse_finite(x, line_no, "curve x")?,
                 parse_finite(y, line_no, "curve y")?,
-            ])
-        })
-        .collect::<Result<Vec<_>, ParseError>>()?;
+            ]
+        });
+    }
     if points.is_empty() {
         return Err(ParseError::at(
             line_no,
@@ -803,9 +803,32 @@ fn parse_curve(value: &str, line_no: usize) -> Result<SliderCurve, ParseError> {
         ));
     }
     Ok(SliderCurve {
-        curve_type: SliderCurveType::parse(curve_type),
+        curve_type,
+        segment_count,
+        raw_path: value.to_owned(),
         points,
     })
+}
+
+fn parse_curve_tag(value: &str, line_no: usize) -> Result<SliderCurveType, ParseError> {
+    let Some(first) = value.chars().next() else {
+        return Err(ParseError::at(line_no, "slider curve type is empty"));
+    };
+    match first {
+        'B' if value.len() > 1 => {
+            let degree = parse_value::<usize>(&value[1..], line_no, "B-spline degree")?;
+            if degree == 0 {
+                return Err(ParseError::at(line_no, "B-spline degree must be positive"));
+            }
+            Ok(SliderCurveType::BSpline(degree))
+        }
+        'B' => Ok(SliderCurveType::Bezier),
+        'C' => Ok(SliderCurveType::Catmull),
+        'L' => Ok(SliderCurveType::Linear),
+        'P' => Ok(SliderCurveType::Perfect),
+        other if other.is_alphabetic() => Ok(SliderCurveType::Other(other)),
+        _ => Err(ParseError::at(line_no, "invalid slider curve tag")),
+    }
 }
 
 fn parse_int_list(value: &str, line_no: usize, name: &str) -> Result<Vec<i32>, ParseError> {
@@ -1161,5 +1184,21 @@ mod tests {
                 .as_deref(),
             Some("custom.wav")
         );
+    }
+
+    #[test]
+    fn parses_b_spline_degrees_and_explicit_slider_segments_without_losing_path_text() {
+        let text = "osu file format v14\n[General]\nMode:0\n[HitObjects]\n10,20,30,2,0,B2|40:50|60:70|L|80:90|100:110,1,100\n";
+        let beatmap = OsuBeatmap::parse_bytes(text.as_bytes()).unwrap();
+        let HitObjectKind::Slider { curve, .. } = &beatmap.hit_objects[0].kind else {
+            panic!("slider expected")
+        };
+        assert_eq!(curve.curve_type, SliderCurveType::BSpline(2));
+        assert_eq!(curve.segment_count, 2);
+        assert_eq!(
+            curve.points,
+            vec![[40.0, 50.0], [60.0, 70.0], [80.0, 90.0], [100.0, 110.0]]
+        );
+        assert_eq!(curve.raw_path, "B2|40:50|60:70|L|80:90|100:110");
     }
 }

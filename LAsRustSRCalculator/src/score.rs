@@ -1,5 +1,6 @@
 //! Fixed-layout score input shared by the ruleset performance calculators.
 
+use crate::beatmap::{DifficultySettings, GameMode};
 use crate::mods::Mod;
 
 /// Judgement results used by lazer rulesets and their score calculators.
@@ -86,6 +87,9 @@ impl ScoreStatistics {
 /// Score information consumed by the per-ruleset performance calculators.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct ScoreInfo {
+    /// Original beatmap mode and difficulty used by score PP calculations.
+    pub ruleset: Option<GameMode>,
+    pub beatmap_difficulty: Option<DifficultySettings>,
     pub mods: Vec<Mod>,
     pub statistics: ScoreStatistics,
     pub max_combo: i32,

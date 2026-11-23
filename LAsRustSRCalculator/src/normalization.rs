@@ -122,6 +122,7 @@ pub enum NormalizedHitObjectKind {
         /// Normalized repeat count; the osu file stores span count (repeat count + 1).
         repeat_count: u32,
         pixel_length: Option<f64>,
+        edge_sounds: Vec<i32>,
     },
     Spinner {
         end_time: f64,
@@ -266,6 +267,7 @@ fn normalize_object(
             curve,
             repeats,
             pixel_length,
+            edge_sounds,
             ..
         } => {
             if *repeats > MAX_LEGACY_SLIDER_SPAN_COUNT {
@@ -290,6 +292,7 @@ fn normalize_object(
                 path_control_points,
                 repeat_count: repeats.saturating_sub(1),
                 pixel_length: (*pixel_length > 0.0).then_some(*pixel_length),
+                edge_sounds: edge_sounds.clone(),
             }
         }
         RawHitObjectKind::Spinner { end_time } => {
@@ -436,6 +439,8 @@ mod tests {
             kind: HitObjectKind::Slider {
                 curve: SliderCurve {
                     curve_type: SliderCurveType::Bezier,
+                    segment_count: 1,
+                    raw_path: "".to_owned(),
                     points: vec![[x + 10.9, y - 20.9]],
                 },
                 repeats: spans,
@@ -642,12 +647,14 @@ mod tests {
             path_control_points,
             repeat_count,
             pixel_length,
+            edge_sounds,
         } = &normalized.hit_objects[0].kind
         else {
             panic!("slider expected")
         };
         assert_eq!(*repeat_count, 2);
         assert_eq!(*pixel_length, None);
+        assert_eq!(edge_sounds, &[]);
         assert_eq!(raw_curve.points, vec![[111.80000000000001, 180.0]]);
         assert_eq!(normalized.hit_objects[0].position, [100.0, 200.0]);
         assert_eq!(path_control_points, &[[11.0, -20.0]]);
@@ -670,6 +677,8 @@ mod tests {
         raw.hit_objects[0].kind = HitObjectKind::Slider {
             curve: SliderCurve {
                 curve_type: SliderCurveType::Bezier,
+                segment_count: 1,
+                raw_path: "".to_owned(),
                 points: vec![[110.9, 180.9]],
             },
             repeats: 0,
@@ -689,6 +698,8 @@ mod tests {
         raw.hit_objects[0].kind = HitObjectKind::Slider {
             curve: SliderCurve {
                 curve_type: SliderCurveType::Bezier,
+                segment_count: 1,
+                raw_path: "".to_owned(),
                 points: vec![[110.9, 180.9]],
             },
             repeats: MAX_LEGACY_SLIDER_SPAN_COUNT + 1,

@@ -47,17 +47,24 @@ pub type SrNote = (i32, i32, i32);
 impl SRCalculator {
     /// Star rating only, from a parsed `.osu`. Kept for the standalone/file-path use case.
     pub fn calculate_sr_from_parsed_data(data: &ParsedData) -> Result<f64, String> {
+        Self::calculate_sr_from_parsed_data_with_config(data, SrConfig::LEGACY_DEFAULT)
+    }
+
+    /// Star rating from a parsed `.osu` with host-selected tuning, matching the configurable C# engine.
+    ///
+    /// The legacy file-path API retains its original 9.0 / 6.0 defaults. Ez2Lazer callers should pass the tuning
+    /// read for that calculation (fallback 8.0 / 5.5) instead of relying on process-global defaults.
+    pub fn calculate_sr_from_parsed_data_with_config(
+        data: &ParsedData,
+        config: SrConfig,
+    ) -> Result<f64, String> {
         let note_seq = build_note_seq(data);
         let cross = CrossMatrixProvider::get_matrix(data.column_count)
             .ok_or_else(|| format!("No cross matrix for {}k", data.column_count))?;
-        Ok(Self::calculate_with_components(
-            note_seq,
-            data.column_count,
-            data.od,
-            cross,
-            SrConfig::LEGACY_DEFAULT,
-        )?
-        .sr)
+        Ok(
+            Self::calculate_with_components(note_seq, data.column_count, data.od, cross, config)?
+                .sr,
+        )
     }
 
     /// Star rating plus the six-component breakdown.

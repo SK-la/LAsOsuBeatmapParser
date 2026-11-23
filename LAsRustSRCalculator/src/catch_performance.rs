@@ -5,6 +5,7 @@
 
 use crate::attributes::{CatchDifficultyAttributes, CatchPerformanceAttributes};
 use crate::beatmap::DifficultySettings;
+use crate::calculator::{CalculationError, PerformanceCalculator};
 use crate::mods::{Mod, ModError, calculate_rate_with_mods};
 use crate::score::{HitResult, ScoreInfo};
 
@@ -37,6 +38,19 @@ impl From<ModError> for CatchPerformanceError {
 pub struct CatchPerformanceCalculator;
 
 impl CatchPerformanceCalculator {
+    pub fn calculate_score(
+        score: &ScoreInfo,
+        attributes: &CatchDifficultyAttributes,
+    ) -> Result<CatchPerformanceAttributes, CalculationError> {
+        let difficulty = score.beatmap_difficulty.as_ref().ok_or_else(|| {
+            CalculationError::InvalidBeatmap(
+                "Catch performance requires beatmap difficulty in ScoreInfo".to_owned(),
+            )
+        })?;
+        Self::calculate(score, attributes, difficulty)
+            .map_err(|error| CalculationError::InvalidBeatmap(error.to_string()))
+    }
+
     pub fn calculate(
         score: &ScoreInfo,
         difficulty_attributes: &CatchDifficultyAttributes,
@@ -166,6 +180,19 @@ impl CatchPerformanceCalculator {
         }
 
         Ok(CatchPerformanceAttributes { total: value })
+    }
+}
+
+impl PerformanceCalculator for CatchPerformanceCalculator {
+    type Difficulty = CatchDifficultyAttributes;
+    type Attributes = CatchPerformanceAttributes;
+
+    fn calculate(
+        &self,
+        score: &ScoreInfo,
+        difficulty: &Self::Difficulty,
+    ) -> Result<Self::Attributes, CalculationError> {
+        Self::calculate_score(score, difficulty)
     }
 }
 

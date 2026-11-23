@@ -202,7 +202,6 @@ fn map_conversion_error(error: ManiaConversionError) -> CalculationError {
             "Mania total column count must be in 1..=18, got {columns}"
         )),
         ManiaConversionError::SliderPathDistanceUnavailable { .. }
-        | ManiaConversionError::AmbiguousSliderPathExtension { .. }
         | ManiaConversionError::InvalidTimingPoint { .. }
         | ManiaConversionError::InvalidSliderVelocity { .. }
         | ManiaConversionError::SliderSpanCountOverflow { .. }
@@ -446,7 +445,7 @@ fn decay(decay_base: f64, delta_time_ms: f64) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::beatmap::{DifficultySettings, OsuBeatmap, TimingPoint};
+    use crate::beatmap::OsuBeatmap;
 
     fn note(start_time_ms: f64, end_time_ms: f64, column: usize) -> ManiaNote {
         ManiaNote {
@@ -476,48 +475,33 @@ mod tests {
     }
 
     #[test]
-    fn calculator_rejects_unconverted_legacy_objects_instead_of_guessing() {
+    fn calculator_uses_realized_bezier_duration_without_declared_length() {
         let beatmap = OsuBeatmap::parse_bytes(
             b"osu file format v14\n[General]\nMode:3\n[Difficulty]\nCircleSize:4\n[HitObjects]\n64,192,0,2,0,B|128:192|256:192,1,0\n",
         )
         .unwrap();
-        let error = ManiaDifficultyCalculator
-            .calculate(&beatmap, &[])
-            .unwrap_err();
-        assert!(matches!(error, CalculationError::InvalidBeatmap(_)));
+        let result = ManiaDifficultyCalculator.calculate(&beatmap, &[]).unwrap();
+        assert_eq!(result.max_combo, 14);
     }
 
     #[test]
     fn official_mania_fixture_matches_lazer_star_and_max_combo_golden() {
-        let mut beatmap =
+        let beatmap =
             OsuBeatmap::parse_bytes(include_bytes!("../tests/fixtures/mania-diffcalc-test.osu"))
                 .unwrap();
-        beatmap.difficulty = DifficultySettings {
-            hp_drain_rate: Some(5.0),
-            circle_size: Some(4.0),
-            overall_difficulty: Some(7.0),
-            approach_rate: Some(7.0),
-            slider_multiplier: Some(1.6),
-            slider_tick_rate: Some(1.0),
-        };
-        beatmap.timing_points = vec![TimingPoint {
-            time: 0.0,
-            beat_length: 500.0,
-            meter: 4,
-            sample_set: 0,
-            sample_index: 0,
-            volume: 100,
-            uninherited: true,
-            effects: 0,
-        }];
-        let attributes = ManiaDifficultyCalculator.calculate(&beatmap, &[]).unwrap();
-        assert_eq!(attributes.max_combo, 242);
-        let expected = 2.3493769750220914;
-        let relative_error = (attributes.star_rating - expected).abs() / expected.abs();
-        assert!(
-            relative_error <= 2e-5,
-            "relative error was {relative_error:e}"
-        );
+        for (mods, expected) in [
+            ([].as_slice(), 2.3493769750220914_f64),
+            ([Mod::DoubleTime].as_slice(), 2.797245912537965),
+        ] {
+            let attributes = ManiaDifficultyCalculator.calculate(&beatmap, mods).unwrap();
+            assert_eq!(attributes.max_combo, 242);
+            let relative_error = (attributes.star_rating - expected).abs() / expected.abs();
+            assert!(
+                relative_error <= 2e-5,
+                "mods {mods:?}: expected {expected}, got {} ({relative_error:e} relative error)",
+                attributes.star_rating
+            );
+        }
     }
 
     #[test]

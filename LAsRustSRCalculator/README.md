@@ -1,31 +1,31 @@
 # Rust osu! Analysis
 
-`rust_sr_calculator` is a standalone Rust crate and C-compatible library for osu! beatmap analysis. The target is parity with Ez2Lazer's four `.osu` rulesets and chart-level analysis APIs, with the same skill-axis IDs and output order. Porting is in progress; the current crate is not yet at full Ez2Lazer feature or numerical parity.
+`rust_sr_calculator` is an independent Rust library and C-compatible library for osu! beatmap analysis. It consumes `.osu` bytes directly; it does not serialize maps or results through JSON. Public chart axes use typed enums, Ez2Lazer IDs, and dense `f64` vectors.
 
-## Current foundation
+## Implemented foundation
 
-- Parse `.osu` data from a byte slice, any `Read`/`BufRead` stream, or a file path.
-- Represent standard, taiko, catch, and mania maps, their timing/control points, breaks, hit samples, and primary hit-object fields.
-- Expose typed Sunny SR, Mina, and PPP skill axes with stable IDs, canonical ordering, and dense `f64` vectors.
-- Retain the existing mania SR calculator and C ABI while the four-ruleset analysis API is ported.
+- Strict UTF-8 `.osu` parsing from `&[u8]`, `Read`, `BufRead`, and file path, with source order retained for combo semantics.
+- Four-mode raw chart data, timing/control points, break periods, samples, primary object types, slider source tags, and legacy difficulty normalization.
+- Typed difficulty/performance attributes, mod descriptions, score result counts, and calculator traits.
+- Mania native-map conversion, official difficulty and score PP, Sunny SR parity correction, Catch conversion/difficulty/score PP, and Taiko native plus osu! slider conversion/difficulty/score PP.
+- PP+ chart axis calculators and perfect-play PP+ formulas for all four modes. osu! PP+ takes playable geometry.
+- Mina chart and play axes using the same patched MinaCalc 0.74.0 binary as Ez2Lazer, hosted by the `wasmi` interpreter.
+- KPS graph and column statistics, native Mania measurements, and beatmap tag extraction.
+- CSI Mania chart feature extraction and Sunny Dan interval lookup/fallback estimates.
+- Shared slider path geometry and slider-event generation used by ruleset converters.
 
-Visual storyboard commands, external sample files, and derived slider duration/nested-object generation are handled outside the raw parser model and remain part of the analysis/conversion work.
+The crate is still under migration. CSI feature measurements and Sunny Dan mapping are present, but CSI pattern classification, LeoBlack, Dan skillset buckets/ladders/player aggregation remain pending. The low-level `osu::OsuDifficultyCalculator` accepts evaluator features; the `osu_converter::OsuDifficultyCalculator` entry builds those features from a native `.osu` map. Mirrored sliders are explicitly unsupported. Ruleset-specific mod support is limited to the mods implemented by each calculator.
 
 ## Rust API
 
-The parser reads directly from memory without an intermediate text serialization:
-
 ```rust,ignore
 let beatmap = OsuBeatmap::parse_bytes(osu_file_bytes)?;
+let difficulty = ManiaDifficultyCalculator.calculate(&beatmap, &[])?;
 ```
 
-Equivalent entry points are `OsuBeatmap::parse_reader`, `OsuBeatmap::parse_bufread`, and `OsuBeatmap::parse_file`. Analysis vectors use typed axes rather than string-keyed maps internally:
+The ruleset calculators accept typed `Mod` values and return typed difficulty attributes. Algorithm-specific chart skills return dense vectors indexed by enums whose `id()` values match Ez2Lazer's persisted IDs.
 
-```rust,ignore
-let mut skills = SkillVector::<EzMinaSkillAxis>::zeros();
-skills.set(EzMinaSkillAxis::Stream, 3.25);
-let stream = skills.get(EzMinaSkillAxis::Stream);
-```
+Native callers can use `ez_chart_difficulty_from_bytes_v1` with a borrowed byte buffer and an output record containing a `double` star rating followed by two 32-bit integers for maximum combo and ruleset ID. Mania Mina axes are also available from `ez_mina_chart_axes_from_bytes_v1`; its output is eight `f64` values in the stable Overall, Stream, Jumpstream, Handstream, Stamina, Jack, Chordjack, Technical order. Both V1 byte APIs avoid serialization and leave output untouched when parsing or calculation fails.
 
 ## Build and tests
 
@@ -34,4 +34,4 @@ cargo check --tests --manifest-path LAsRustSRCalculator/Cargo.toml
 cargo test --manifest-path LAsRustSRCalculator/Cargo.toml
 ```
 
-The crate is built as both an `rlib` and a `cdylib`. Interop uses byte slices and fixed-layout values; JSON is not used to transfer maps or analysis results.
+The crate builds as both `rlib` and `cdylib`. Current Windows test runs may need an MSVC linker; the repository's CI can run the ordinary `cargo test` command on a native Rust target.
