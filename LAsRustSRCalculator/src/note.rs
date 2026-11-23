@@ -1,6 +1,6 @@
 use std::cmp::Ordering;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Note {
     // 序号(从0开始，0-17)
     pub k: i32,

@@ -1,79 +1,37 @@
-# Rust SR Calculator
+# Rust osu! Analysis
 
-This is a Rust implementation of the Star Rating (SR) calculation algorithm for osu! mania beatmaps.
+`rust_sr_calculator` is a standalone Rust crate and C-compatible library for osu! beatmap analysis. The target is parity with Ez2Lazer's four `.osu` rulesets and chart-level analysis APIs, with the same skill-axis IDs and output order. Porting is in progress; the current crate is not yet at full Ez2Lazer feature or numerical parity.
 
-## Building
+## Current foundation
 
-1. Install Rust: https://rustup.rs/
-2. Build the library:
-   ```bash
-   cargo build --release
-   ```
+- Parse `.osu` data from a byte slice, any `Read`/`BufRead` stream, or a file path.
+- Represent standard, taiko, catch, and mania maps, their timing/control points, breaks, hit samples, and primary hit-object fields.
+- Expose typed Sunny SR, Mina, and PPP skill axes with stable IDs, canonical ordering, and dense `f64` vectors.
+- Retain the existing mania SR calculator and C ABI while the four-ruleset analysis API is ported.
 
-This will create `target/release/rust_sr_calculator.dll` (on Windows).
+Visual storyboard commands, external sample files, and derived slider duration/nested-object generation are handled outside the raw parser model and remain part of the analysis/conversion work.
 
-## Using in C#
+## Rust API
 
-To use the Rust SR calculator in your C# project:
+The parser reads directly from memory without an intermediate text serialization:
 
-1. Copy the `rust_sr_calculator.dll` to your C# project directory.
+```rust,ignore
+let beatmap = OsuBeatmap::parse_bytes(osu_file_bytes)?;
+```
 
-2. Add P/Invoke declarations:
-   ```csharp
-   using System.Runtime.InteropServices;
+Equivalent entry points are `OsuBeatmap::parse_reader`, `OsuBeatmap::parse_bufread`, and `OsuBeatmap::parse_file`. Analysis vectors use typed axes rather than string-keyed maps internally:
 
-   [DllImport("rust_sr_calculator.dll", CallingConvention = CallingConvention.Cdecl)]
-   private static extern IntPtr calculate_sr_from_json(IntPtr jsonPtr, int len);
-   ```
+```rust,ignore
+let mut skills = SkillVector::<EzMinaSkillAxis>::zeros();
+skills.set(EzMinaSkillAxis::Stream, 3.25);
+let stream = skills.get(EzMinaSkillAxis::Stream);
+```
 
-3. Call the function:
-   ```csharp
-   private static double CalculateSRRust(Beatmap beatmap)
-   {
-       var beatmapData = new
-       {
-           difficulty_section = new
-           {
-               overall_difficulty = beatmap.DifficultySection.OverallDifficulty,
-               circle_size = beatmap.DifficultySection.CircleSize
-           },
-           hit_objects = beatmap.HitObjects.Select(ho => new
-           {
-               position = new { x = ho.Position.X },
-               start_time = ho.StartTime,
-               end_time = ho.EndTime
-           }).ToArray()
-       };
+## Build and tests
 
-       string json = System.Text.Json.JsonSerializer.Serialize(beatmapData);
-       byte[] jsonBytes = System.Text.Encoding.UTF8.GetBytes(json);
+```sh
+cargo check --tests --manifest-path LAsRustSRCalculator/Cargo.toml
+cargo test --manifest-path LAsRustSRCalculator/Cargo.toml
+```
 
-       IntPtr resultPtr = calculate_sr_from_json(Marshal.StringToHGlobalAnsi(json), jsonBytes.Length);
-
-       if (resultPtr == IntPtr.Zero)
-       {
-           throw new Exception("Rust SR calculation failed");
-       }
-
-       string resultJson = Marshal.PtrToStringAnsi(resultPtr);
-       var result = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, double>>(resultJson);
-
-       Marshal.FreeHGlobal(resultPtr);
-
-       return result["sr"];
-   }
-   ```
-
-## Running Tests
-
-To run the comparison tests between C# and Rust implementations:
-
-1. Update the test directory path in `SRCalculatorComparisonTests.cs`
-2. Run the tests:
-   ```bash
-   dotnet test
-   ```
-
-## Performance
-
-The Rust implementation uses parallel processing with Rayon for improved performance on multi-core systems.
+The crate is built as both an `rlib` and a `cdylib`. Interop uses byte slices and fixed-layout values; JSON is not used to transfer maps or analysis results.

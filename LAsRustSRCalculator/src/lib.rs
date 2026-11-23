@@ -1,9 +1,11 @@
 pub mod sr;
 pub mod note;
 pub mod cross_matrix;
+pub mod beatmap;
 pub mod parser;
 pub mod ffi;
 pub mod math;
+pub mod skills;
 
 #[cfg(test)]
 mod ffi_tests;
@@ -95,9 +97,11 @@ pub extern "C" fn calculate_sr_from_osu_file(path_ptr: *const c_char, len: usize
 
 #[cfg(test)]
 mod tests {
+    #[cfg(not(target_os = "wasi"))]
     use super::*;
 
     #[test]
+    #[cfg(not(target_os = "wasi"))]
     fn test_sr_calculation() {
         // Use the actual osu file for testing
         let file_path = "..\\tests\\Resource\\Glen Check - 60's Cardin (SK_la) [Insane].osu";
