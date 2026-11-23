@@ -1,4 +1,4 @@
-//! Native Taiko beatmap conversion and difficulty calculation.
+//! Taiko beatmap conversion from all osu! rulesets and difficulty calculation.
 
 use crate::attributes::TaikoDifficultyAttributes;
 use crate::beatmap::{GameMode, OsuBeatmap};
@@ -10,7 +10,7 @@ use crate::taiko::{
     TaikoDifficultyCalculator as TaikoStrainCalculator, TaikoHitType, TaikoNote, TaikoObjectType,
 };
 
-/// Converts normalized osu!standard or native Taiko objects into the Taiko difficulty core input.
+/// Converts normalized objects from any osu! ruleset into Taiko difficulty input.
 pub struct TaikoBeatmapConverter;
 
 impl TaikoBeatmapConverter {
@@ -18,13 +18,6 @@ impl TaikoBeatmapConverter {
         beatmap: &NormalizedBeatmap,
         mods: &[Mod],
     ) -> Result<Vec<TaikoNote>, CalculationError> {
-        if !matches!(beatmap.mode, GameMode::Taiko | GameMode::Standard) {
-            return Err(CalculationError::WrongRuleset {
-                expected: GameMode::Taiko,
-                actual: beatmap.mode,
-            });
-        }
-
         let rate = calculate_rate_with_mods(mods)
             .map_err(|error| CalculationError::InvalidMod(error.to_string()))?;
         let (_, adjusted_slider_multiplier) = adjusted_difficulty(beatmap, mods)?;
@@ -33,6 +26,7 @@ impl TaikoBeatmapConverter {
         let effects = &beatmap.control_points.effect;
         let mut notes = Vec::with_capacity(beatmap.hit_objects.len());
         let is_native_taiko = beatmap.mode == GameMode::Taiko;
+        let is_standard_source = beatmap.mode == GameMode::Standard;
         let mut converted_scroll_changes = Vec::<(f64, f64)>::new();
         let mut last_scroll_speed = 1.0;
 
@@ -53,7 +47,7 @@ impl TaikoBeatmapConverter {
                     .and_then(|index| effects[index].scroll_speed)
                     .unwrap_or(1.0)
                     .clamp(0.01, 10.0)
-            } else {
+            } else if is_standard_source {
                 if matches!(&object.kind, NormalizedHitObjectKind::Slider { .. }) {
                     let sv_index = difficulty.partition_point(|point| point.time <= start);
                     let sv = sv_index.checked_sub(1).map_or(1.0, |index| {
@@ -69,6 +63,8 @@ impl TaikoBeatmapConverter {
                     .rev()
                     .find(|(time, _)| *time <= lookup_time)
                     .map_or(1.0, |(_, value)| *value)
+            } else {
+                1.0
             };
             let effective_bpm =
                 (60_000.0 / beat_length(lookup_time)) * (adjusted_slider_multiplier * scroll_speed);
@@ -186,8 +182,39 @@ impl TaikoBeatmapConverter {
             });
         }
 
+        if beatmap.mode == GameMode::Mania {
+            collapse_mania_chords(&mut notes);
+        }
+
         Ok(notes)
     }
+}
+
+/// Lazer converts a simultaneous Mania row to one Taiko hit, marking it strong when the row has
+/// multiple notes. This post-pass also collapses a same-time group whose first object is a swell or
+/// drum roll, matching the converter's first-object selection.
+fn collapse_mania_chords(notes: &mut Vec<TaikoNote>) {
+    if notes.len() < 2 {
+        return;
+    }
+
+    let mut collapsed = Vec::with_capacity(notes.len());
+    let mut index = 0;
+    while index < notes.len() {
+        let mut end = index + 1;
+        while end < notes.len() && notes[end].start_time_ms == notes[index].start_time_ms {
+            end += 1;
+        }
+
+        let mut first = notes[index];
+        if end - index > 1 && first.object_type == TaikoObjectType::Hit {
+            first.is_strong = true;
+        }
+        collapsed.push(first);
+        index = end;
+    }
+
+    *notes = collapsed;
 }
 
 pub(crate) fn adjusted_difficulty(
@@ -345,5 +372,65 @@ mod tests {
             assert_eq!(roll.object_type, TaikoObjectType::DrumRoll);
             assert!((roll.end_time_ms - expected_end).abs() < 2.0);
         }
+    }
+
+    #[test]
+    fn taiko_converter_accepts_catch_sources_and_preserves_base_hits() {
+        let beatmap = OsuBeatmap::parse_bytes(
+            b"osu file format v14\n[General]\nMode:2\n[Difficulty]\nCircleSize:5\nOverallDifficulty:5\n[TimingPoints]\n0,500,4,2,1,50,1,0\n[HitObjects]\n64,192,0,1,0,0:0:0:0:\n192,192,500,1,2,0:0:0:0:\n",
+        )
+        .unwrap();
+        let normalized = normalize(&beatmap).unwrap();
+        let notes = TaikoBeatmapConverter::convert(&normalized, &[]).unwrap();
+
+        assert_eq!(notes.len(), 2);
+        assert_eq!(notes[0].object_type, TaikoObjectType::Hit);
+        assert_eq!(notes[0].hit_type, Some(TaikoHitType::Centre));
+        assert_eq!(notes[1].hit_type, Some(TaikoHitType::Rim));
+        assert_eq!(
+            notes
+                .iter()
+                .map(|note| note.max_combo_contribution)
+                .sum::<i32>(),
+            2
+        );
+    }
+
+    #[test]
+    fn taiko_converter_collapses_mania_chords_to_strong_hits_and_keeps_holds_as_swells() {
+        let beatmap = OsuBeatmap::parse_bytes(
+            b"osu file format v14\n[General]\nMode:3\n[Difficulty]\nCircleSize:4\nOverallDifficulty:5\n[TimingPoints]\n0,500,4,2,1,50,1,0\n[HitObjects]\n64,192,0,1,0,0:0:0:0:\n192,192,0,1,0,0:0:0:0:\n320,192,1000,128,0,1500:0:0:0:0:\n",
+        )
+        .unwrap();
+        let normalized = normalize(&beatmap).unwrap();
+        let notes = TaikoBeatmapConverter::convert(&normalized, &[]).unwrap();
+
+        assert_eq!(notes.len(), 2);
+        assert_eq!(notes[0].object_type, TaikoObjectType::Hit);
+        assert!(notes[0].is_strong);
+        assert_eq!(notes[0].start_time_ms, 0.0);
+        assert_eq!(notes[1].object_type, TaikoObjectType::Swell);
+        assert_eq!(notes[1].start_time_ms, 1000.0);
+        assert_eq!(notes[1].end_time_ms, 1500.0);
+        assert_eq!(
+            notes
+                .iter()
+                .map(|note| note.max_combo_contribution)
+                .sum::<i32>(),
+            1
+        );
+    }
+
+    #[test]
+    fn taiko_converter_rejects_other_mods_but_not_non_native_source_modes() {
+        let beatmap = OsuBeatmap::parse_bytes(
+            b"osu file format v14\n[General]\nMode:2\n[Difficulty]\nCircleSize:5\n[HitObjects]\n64,192,0,1,0,0:0:0:0:\n",
+        )
+        .unwrap();
+        let normalized = normalize(&beatmap).unwrap();
+
+        assert!(
+            TaikoBeatmapConverter::convert(&normalized, &[Mod::Other("X".to_owned())]).is_err()
+        );
     }
 }

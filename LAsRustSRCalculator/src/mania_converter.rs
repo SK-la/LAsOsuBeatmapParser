@@ -1,8 +1,8 @@
-//! Legacy native-Mania `.osu` object conversion for the Mania difficulty vertical slice.
+//! Native Mania and legacy-source `.osu` conversion to playable Mania notes.
 //!
 //! This mirrors the native-Mania branches of Ez2Lazer's `ManiaBeatmapConverter`,
 //! `PassThroughPatternGenerator`, and `SpinnerPatternGenerator`. It is intentionally not a converter for osu!standard
-//! maps played as Mania: those maps require the probabilistic legacy pattern generators, which are a separate port.
+//! maps played as Mania: non-Mania sources use [`crate::mania_legacy_converter::ManiaLegacyBeatmapConverter`].
 //!
 //! Slider duration uses the normalized legacy path and timing points.
 
@@ -47,6 +47,7 @@ pub enum ManiaConversionError {
     SliderSpanCountOverflow {
         object_index: usize,
     },
+    LegacySourceConversion(String),
     SliderPathDistanceUnavailable {
         object_index: usize,
         error: SliderPathError,
@@ -89,6 +90,7 @@ impl Display for ManiaConversionError {
             Self::SliderSpanCountOverflow { object_index } => {
                 write!(f, "Mania slider {object_index} span count overflows")
             }
+            Self::LegacySourceConversion(message) => f.write_str(message),
             Self::SliderPathDistanceUnavailable {
                 object_index,
                 error,
@@ -112,8 +114,17 @@ impl ManiaBeatmapConverter {
         beatmap: &NormalizedBeatmap,
         mods: &[Mod],
     ) -> Result<(Vec<ManiaNote>, usize), ManiaConversionError> {
-        if beatmap.mode != GameMode::Mania {
-            return Err(ManiaConversionError::UnsupportedMode(beatmap.mode));
+        match beatmap.mode {
+            GameMode::Mania => {}
+            GameMode::Standard | GameMode::Catch => {
+                return crate::mania_legacy_converter::ManiaLegacyBeatmapConverter::convert(
+                    beatmap, mods,
+                )
+                .map_err(|error| ManiaConversionError::LegacySourceConversion(error.to_string()));
+            }
+            GameMode::Taiko => {
+                return Err(ManiaConversionError::UnsupportedMode(beatmap.mode));
+            }
         }
 
         for modifier in mods {
@@ -794,12 +805,27 @@ mod tests {
     }
 
     #[test]
-    fn rejects_non_mania_maps_and_unknown_conversion_mods() {
+    fn dispatches_legacy_sources_and_rejects_taiko_or_unknown_conversion_mods() {
         let mut standard = beatmap(4.0, Vec::new());
         standard.mode = GameMode::Standard;
+        standard.difficulty.overall_difficulty = 3.0;
+        let (standard_notes, standard_columns) =
+            ManiaBeatmapConverter::convert(&standard, &[]).unwrap();
+        assert!(standard_notes.is_empty());
+        assert_eq!(standard_columns, 4);
+
+        let mut catch = beatmap(4.0, Vec::new());
+        catch.mode = GameMode::Catch;
+        catch.difficulty.overall_difficulty = 3.0;
+        let (catch_notes, catch_columns) = ManiaBeatmapConverter::convert(&catch, &[]).unwrap();
+        assert!(catch_notes.is_empty());
+        assert_eq!(catch_columns, 4);
+
+        let mut taiko = beatmap(4.0, Vec::new());
+        taiko.mode = GameMode::Taiko;
         assert_eq!(
-            ManiaBeatmapConverter::convert(&standard, &[]),
-            Err(ManiaConversionError::UnsupportedMode(GameMode::Standard))
+            ManiaBeatmapConverter::convert(&taiko, &[]),
+            Err(ManiaConversionError::UnsupportedMode(GameMode::Taiko))
         );
 
         let map = beatmap(4.0, Vec::new());

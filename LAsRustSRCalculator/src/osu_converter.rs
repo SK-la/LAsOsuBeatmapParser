@@ -70,7 +70,10 @@ impl OsuBeatmapConverter {
         stack_leniency: f32,
         mods: &[Mod],
     ) -> Result<Vec<PlayableObject>, CalculationError> {
-        if beatmap.mode != GameMode::Standard {
+        if !matches!(
+            beatmap.mode,
+            GameMode::Standard | GameMode::Catch | GameMode::Mania
+        ) {
             return Err(CalculationError::WrongRuleset {
                 expected: GameMode::Standard,
                 actual: beatmap.mode,
@@ -716,6 +719,66 @@ fn angle(current: [f32; 2], previous: [f32; 2], earliest: [f32; 2]) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn catch_and_mania_sources_convert_to_positioned_osu_objects() {
+        for fixture in [
+            &include_bytes!("../tests/fixtures/catch-diffcalc-test.osu")[..],
+            &include_bytes!("../tests/fixtures/mania-diffcalc-test.osu")[..],
+        ] {
+            let beatmap = OsuBeatmap::parse_bytes(fixture).unwrap();
+            assert!(matches!(beatmap.mode, GameMode::Catch | GameMode::Mania));
+            let normalized = normalize(&beatmap).unwrap();
+            let playable = OsuBeatmapConverter::convert(
+                &normalized,
+                beatmap.general.stack_leniency.unwrap_or(0.7) as f32,
+                &[],
+            )
+            .unwrap();
+
+            assert_eq!(playable.len(), beatmap.hit_objects.len());
+            for (source, converted) in normalized.hit_objects.iter().zip(&playable) {
+                let expected_kind = match &source.kind {
+                    NormalizedHitObjectKind::Circle => Kind::Circle,
+                    NormalizedHitObjectKind::Slider { .. } => Kind::Slider,
+                    NormalizedHitObjectKind::Spinner { .. }
+                    | NormalizedHitObjectKind::Hold { .. } => Kind::Spinner,
+                };
+                assert_eq!(converted.kind, expected_kind);
+            }
+            assert!(playable.iter().all(|object| {
+                object
+                    .position
+                    .iter()
+                    .all(|component| component.is_finite())
+                    && object
+                        .end_position
+                        .iter()
+                        .all(|component| component.is_finite())
+                    && object.start_time.is_finite()
+                    && object.end_time.is_finite()
+            }));
+
+            let difficulty = OsuDifficultyCalculator.calculate(&beatmap, &[]).unwrap();
+            assert!(difficulty.star_rating.is_finite());
+            assert!(difficulty.max_combo as usize >= beatmap.hit_objects.len());
+        }
+    }
+
+    #[test]
+    fn taiko_sources_are_not_convertible_to_osu_position_objects() {
+        let beatmap = OsuBeatmap::parse_bytes(
+            b"osu file format v14\n[General]\nMode:1\n[Difficulty]\nCircleSize:4\n[HitObjects]\n64,192,1000,1,0\n",
+        )
+        .unwrap();
+        assert!(matches!(
+            OsuDifficultyCalculator.calculate(&beatmap, &[]),
+            Err(CalculationError::WrongRuleset {
+                expected: GameMode::Standard,
+                actual: GameMode::Taiko,
+            })
+        ));
+    }
 
     #[test]
     fn standard_reference_difficulty() {

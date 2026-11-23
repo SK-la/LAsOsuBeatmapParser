@@ -195,6 +195,9 @@ fn map_conversion_error(error: ManiaConversionError) -> CalculationError {
             expected: GameMode::Mania,
             actual,
         },
+        ManiaConversionError::LegacySourceConversion(message) => {
+            CalculationError::InvalidBeatmap(message)
+        }
         ManiaConversionError::UnknownConversionMod(acronym) => CalculationError::InvalidMod(
             format!("unknown conversion mod `{acronym}` may change Mania columns or patterns"),
         ),
@@ -472,6 +475,29 @@ mod tests {
         assert!((attributes.star_rating - 0.0594).abs() < 1e-14);
         assert!(attributes.mods.is_empty());
         assert_eq!(ManiaDifficultyCalculator::VERSION, 20241007);
+    }
+
+    #[test]
+    fn calculator_dispatches_osu_standard_conversion_into_mania() {
+        let beatmap =
+            OsuBeatmap::parse_bytes(include_bytes!("../tests/fixtures/mania-standard-basic.osu"))
+                .unwrap();
+        let attributes = ManiaDifficultyCalculator.calculate(&beatmap, &[]).unwrap();
+
+        assert!(attributes.star_rating.is_finite() && attributes.star_rating > 0.0);
+        assert!(attributes.max_combo > 0);
+
+        let taiko = OsuBeatmap::parse_bytes(
+            b"osu file format v14\n[General]\nMode:1\n[Difficulty]\nCircleSize:4\n[HitObjects]\n",
+        )
+        .unwrap();
+        assert!(matches!(
+            ManiaDifficultyCalculator.calculate(&taiko, &[]),
+            Err(CalculationError::WrongRuleset {
+                expected: GameMode::Mania,
+                actual: GameMode::Taiko,
+            })
+        ));
     }
 
     #[test]

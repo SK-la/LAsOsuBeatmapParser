@@ -19,7 +19,10 @@ impl CatchBeatmapConverter {
         beatmap: &NormalizedBeatmap,
         mods: &[Mod],
     ) -> Result<(Vec<CatchObjectInput>, i32, f32), CalculationError> {
-        if beatmap.mode != GameMode::Catch {
+        if !matches!(
+            beatmap.mode,
+            GameMode::Catch | GameMode::Mania | GameMode::Standard
+        ) {
             return Err(CalculationError::WrongRuleset {
                 expected: GameMode::Catch,
                 actual: beatmap.mode,
@@ -504,6 +507,7 @@ fn calculate_hyper_dashes(objects: &mut [CatchObjectInput], half_width: f32) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::normalization::normalize;
 
     #[test]
     fn official_catch_fixture_matches_lazer_golden() {
@@ -531,5 +535,53 @@ mod tests {
             "DoubleTime: expected {expected_dt}, got {} ({dt_relative_error:e})",
             dt.star_rating
         );
+    }
+
+    #[test]
+    fn standard_maps_convert_to_catch_fruits_and_slider_juice() {
+        let beatmap =
+            OsuBeatmap::parse_bytes(include_bytes!("../tests/fixtures/osu-diffcalc-test.osu"))
+                .unwrap();
+        assert_eq!(beatmap.mode, GameMode::Standard);
+
+        let normalized = normalize(&beatmap).unwrap();
+        let (objects, max_combo, _) = CatchBeatmapConverter::convert(&normalized, &[]).unwrap();
+        assert!(!objects.is_empty());
+        assert_eq!(objects.len(), max_combo as usize);
+        assert!(max_combo > beatmap.hit_objects.len() as i32);
+        assert!(objects.iter().all(|object| {
+            object.start_time_ms.is_finite()
+                && object.effective_x.is_finite()
+                && (0.0..=512.0).contains(&object.effective_x)
+        }));
+
+        let difficulty = CatchDifficultyCalculator.calculate(&beatmap, &[]).unwrap();
+        assert_eq!(difficulty.max_combo, max_combo);
+        assert!(difficulty.star_rating.is_finite() && difficulty.star_rating > 0.0);
+    }
+
+    #[test]
+    fn mania_maps_convert_using_their_x_position_contract() {
+        let mania =
+            OsuBeatmap::parse_bytes(include_bytes!("../tests/fixtures/mania-diffcalc-test.osu"))
+                .unwrap();
+        assert_eq!(mania.mode, GameMode::Mania);
+        let result = CatchDifficultyCalculator.calculate(&mania, &[]).unwrap();
+        assert!(result.star_rating.is_finite());
+        assert!(result.max_combo > 0);
+    }
+
+    #[test]
+    fn taiko_conversion_is_rejected_without_x_position_support() {
+        let bytes = b"osu file format v14\n[General]\nMode:1\n[Difficulty]\nCircleSize:4\n[HitObjects]\n64,192,1000,1,0\n";
+        let taiko = OsuBeatmap::parse_bytes(bytes).unwrap();
+        assert_eq!(taiko.mode, GameMode::Taiko);
+        assert!(matches!(
+            CatchDifficultyCalculator.calculate(&taiko, &[]),
+            Err(CalculationError::WrongRuleset {
+                expected: GameMode::Catch,
+                actual: GameMode::Taiko,
+            })
+        ));
     }
 }
