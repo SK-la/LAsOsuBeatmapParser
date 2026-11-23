@@ -290,19 +290,19 @@ impl OsuBeatmapConverter {
                 slider,
             });
         }
-        apply_stacking(&mut playable, scale, stack_leniency, beatmap.version);
         if mirror {
             for object in &mut playable {
                 object.position[0] = 512.0 - object.position[0];
                 object.end_position[0] = 512.0 - object.end_position[0];
-                if object.kind == Kind::Slider {
-                    return Err(CalculationError::UnsupportedObject {
-                        ruleset: GameMode::Standard,
-                        object: "mirrored slider geometry",
-                    });
+                if let Some(slider) = &mut object.slider {
+                    slider.path.reflect_horizontally();
+                    for (_, _, position) in &mut slider.nested {
+                        position[0] = 512.0 - position[0];
+                    }
                 }
             }
         }
+        apply_stacking(&mut playable, scale, stack_leniency, beatmap.version);
         Ok(playable)
     }
 }
@@ -719,6 +719,79 @@ fn angle(current: [f32; 2], previous: [f32; 2], earliest: [f32; 2]) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn mirror_reflects_slider_geometry_and_preserves_difficulty() {
+        let beatmap = OsuBeatmap::parse_bytes(
+            b"osu file format v14\n[General]\nMode:0\nStackLeniency:0.7\n[Difficulty]\nHPDrainRate:5\nCircleSize:4\nOverallDifficulty:5\nApproachRate:5\nSliderMultiplier:1.4\nSliderTickRate:1\n[TimingPoints]\n0,500,4,2,1,50,1,0\n[HitObjects]\n80,80,0,1,0,0:0:0:0:\n100,100,1000,2,0,L|300:100,1,200\n400,300,2000,1,0,0:0:0:0:\n256,192,3000,2,0,B|300:240|200:160,1,200\n",
+        )
+        .unwrap();
+        let normalized = normalize(&beatmap).unwrap();
+        let stack_leniency = beatmap.general.stack_leniency.unwrap_or(0.7) as f32;
+        let ordinary = OsuBeatmapConverter::convert(&normalized, stack_leniency, &[]).unwrap();
+        let mirrored =
+            OsuBeatmapConverter::convert(&normalized, stack_leniency, &[Mod::Mirror]).unwrap();
+
+        assert_eq!(ordinary.len(), mirrored.len());
+        let mut slider_count = 0;
+        for (source, reflected) in ordinary.iter().zip(&mirrored) {
+            assert!((source.position[0] + reflected.position[0] - 512.0).abs() < 1e-5);
+            assert_eq!(source.position[1], reflected.position[1]);
+            assert!((source.end_position[0] + reflected.end_position[0] - 512.0).abs() < 1e-5);
+            assert_eq!(source.end_position[1], reflected.end_position[1]);
+            assert_eq!(source.kind, reflected.kind);
+            assert_eq!(source.start_time, reflected.start_time);
+            assert_eq!(source.end_time, reflected.end_time);
+
+            match (&source.slider, &reflected.slider) {
+                (Some(source_slider), Some(reflected_slider)) => {
+                    slider_count += 1;
+                    assert_eq!(
+                        source_slider.path.distance(),
+                        reflected_slider.path.distance()
+                    );
+                    assert_eq!(
+                        source_slider.path.vertices().len(),
+                        reflected_slider.path.vertices().len()
+                    );
+                    for (source_vertex, reflected_vertex) in source_slider
+                        .path
+                        .vertices()
+                        .iter()
+                        .zip(reflected_slider.path.vertices())
+                    {
+                        assert_eq!(source_vertex[0], -reflected_vertex[0]);
+                        assert_eq!(source_vertex[1], reflected_vertex[1]);
+                    }
+                    assert_eq!(source_slider.nested.len(), reflected_slider.nested.len());
+                    for (source_event, reflected_event) in
+                        source_slider.nested.iter().zip(&reflected_slider.nested)
+                    {
+                        assert_eq!(source_event.0, reflected_event.0);
+                        assert_eq!(source_event.1, reflected_event.1);
+                        assert!((source_event.2[0] + reflected_event.2[0] - 512.0).abs() < 1e-5);
+                        assert_eq!(source_event.2[1], reflected_event.2[1]);
+                    }
+                }
+                (None, None) => {}
+                _ => panic!("mirror must preserve slider geometry availability"),
+            }
+        }
+        assert!(slider_count > 0, "the fixture must exercise slider paths");
+
+        let ordinary_difficulty = OsuDifficultyCalculator.calculate(&beatmap, &[]).unwrap();
+        let mirrored_difficulty = OsuDifficultyCalculator
+            .calculate(&beatmap, &[Mod::Mirror])
+            .unwrap();
+        let relative_star_error =
+            (ordinary_difficulty.star_rating - mirrored_difficulty.star_rating).abs()
+                / ordinary_difficulty.star_rating.max(1.0);
+        assert!(
+            relative_star_error < 2e-5,
+            "mirror star rating drift: {relative_star_error}"
+        );
+        assert_eq!(ordinary_difficulty.max_combo, mirrored_difficulty.max_combo);
+    }
 
     #[test]
     fn catch_and_mania_sources_convert_to_positioned_osu_objects() {

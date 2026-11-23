@@ -355,6 +355,12 @@ impl SliderPath {
         &self.vertices
     }
 
+    pub(crate) fn reflect_horizontally(&mut self) {
+        for vertex in &mut self.vertices {
+            vertex[0] = -vertex[0];
+        }
+    }
+
     /// Returns the relative position at the given fraction of arc length.
     pub fn position_at(&self, progress: f64) -> [f32; 2] {
         let distance = progress.clamp(0.0, 1.0) * self.distance();
